@@ -57,7 +57,10 @@ source("./LMD_function.R", echo = F)
 ## Step1: Build KNN Graph
 ```{r}
 # Construct knn graph
-W = Symmetric_KNN_graph(knn = 5, feature_space = feature_space)[[1]]
+res = Symmetric_KNN_graph(knn = 5, feature_space = feature_space)
+
+A = res$adj_matrix # Adjacency Matrix
+W = res$graph # Symmetrized Graph ((A + AT) / 2)
 
 # Plot knn graph
 plot_knn_graph(affinity_m = W, label = cell_label, layout = visual_space)
