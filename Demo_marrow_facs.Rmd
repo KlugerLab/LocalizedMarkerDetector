@@ -1,0 +1,303 @@
+---
+title: "Tutorial for Runing Mouse Bone Marrow Dataset"
+author: "Ruiqi Li"
+date: '2023-10-12'
+output: pdf_document
+bibliography: references.bib
+---
+
+# Install & Load Packages
+```{r}
+# Install necessary tools if not already present
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+# Define package lists
+bioc_packages <- c("Seurat")
+github_packages <- c("satijalab/SeuratWrappers")
+
+# Install packages
+sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
+sapply(github_packages, function(pkg) if (!requireNamespace(strsplit(pkg, "/")[[1]][2], quietly = TRUE)) remotes::install_github(pkg))
+
+library("Seurat")
+library("SeuratWrappers")
+```
+
+# Preparing input data
+```{r}
+# If load url doesn't work, please download it and load from your working directory
+load(url("https://figshare.com/ndownloader/files/13092380"))
+tiss <- UpdateSeuratObject(tiss)
+```
+We obtain the following objects from this Seurat Obj:
+* `feature_space`: The output of PCA. This matrix contains the first 20 pricipal components (PCs).
+* `visual_space`: a data.frame with t-SNE coordinates (2D) based on the first 20 PCs.
+* `dat`: a matrix object with the log-normalized expression of genes (rows) in each cell (columns)
+* `cell_label`: Any metadata you wish to visualize and examine related to cells (here we take the cell type annotation)
+```{r}
+DefaultAssay(tiss) <- "RNA"
+n_dim = dim(tiss@reductions$pca@cell.embeddings)[2]
+feature_space = as.matrix(tiss@reductions$pca@cell.embeddings[,1:n_dim])
+visual_space = data.frame(tiss@reductions$tsne@cell.embeddings)
+dat = as.matrix(tiss[[DefaultAssay(tiss)]]@data)
+cell_label = tiss$cell_ontology_class
+```
+We process the `dat` by only keep the genes detected in more than 10 cells and less than 50% of cells (genes is "detected" in a cell only if its expression level is greater than the median expression level of that cell)
+```{r}
+Gene_detected_count <- apply(dat > apply(dat,2,median),1,sum)
+selected_genes = (Gene_detected_count >= 10) & (Gene_detected_count <= ncol(dat) * 0.5)
+dat = dat[selected_genes,,drop = FALSE]
+```
+
+# Running LMD Step by Step
+This provides a step-by-step tutorial for a better understanding of the algorithm. If you want to generate results directly, please skip to 'Running LMD in One Step'
+```{r}
+source("./LMD_function.R", echo = F)
+```
+## Step1: Build KNN Graph
+```{r}
+# Construct knn graph
+W = Symmetric_KNN_graph(knn = 5, feature_space = feature_space)[[1]]
+
+# Plot knn graph
+plot_knn_graph(affinity_m = W, label = cell_label, layout = visual_space)
+```
+
+## Step2: Diffuse Genes on the cell graph
+```{r}
+# Generate $P^{t}, t = 2,4,8,...,max_time$
+P_ls = Obtain_Pls(W = W, max_time = 2^10)
+# Generate initial gene distribution
+rho = Rowwise_normalize(dat[,colnames(W)])
+# Check One Gene Diffusion on Cell graph by time
+gene = "Fcnb"
+print(FeaturePlot_diffusion(coord = visual_space,init_state = rho[gene,],P_ls = P_ls,check_time = c(2,16,128),gene_name = gene))
+```
+
+## Step3: Obtain Diffusion KL score & Cumulative score
+```{r}
+# Obtain diffusion KL score
+res = fast_calculate_multi_score(W = W, init_state = rho, P_ls = P_ls)
+
+# Check Diffusion KL pattern for several genes
+genes = c("Tlr11","Fcnb","Cd79a","4933425H06Rik","Uchl4","Dock11")
+genes_label = rep(c("good","bad"),each = 3)
+Visualize_score_pattern(res, genes = genes, label_class = genes_label, facet_class = NULL)
+
+# Show result
+show_result_lmd(res,n = 10)
+```
+
+# Running LMD in one step
+```{r}
+res = LMD(dat,feature_space)
+```
+
+# Identify Gene Modules
+## Step1: Deriving Gene Modules
+```{r}
+# Select top1000 genes as local genes
+local_gene = show_result_lmd(res, n = 1000)
+local_gene = rownames(local_gene)
+
+# Denoising
+#' We use ALRA @linderman2022zero to Denoise our data
+tiss <- RunALRA(tiss, assay = "RNA")
+DefaultAssay(tiss) <- "RNA"
+dat_alra = as.matrix(tiss[["alra"]]@data)[local_gene,]
+
+# Calculate Gene-gene co-localization distance
+distance_method = "jaccard"
+dist = Calculate_distance(dat_alra, method = distance_method)
+
+# Hierarchical Tree
+clustering_method = "average"
+gene_hree = hclust(dist, method = clustering_method)
+
+# Obtain Gene modules
+gene_partition = dynamicTreeCut::cutreeDynamic(
+  dendro = gene_hree, 
+  distM = as.matrix(dist), deepSplit = 2,
+  pamStage = TRUE, pamRespectsDendro = TRUE,
+  minClusterSize = 5)
+names(gene_partition) = labels(dist)
+
+# Re-name gene modules based on the order of htree
+gene_partition = as.factor(gene_partition)
+module_order = order(sapply(levels(gene_partition), function(mod) {
+  median(which(gene_partition[gene_hree$order] == mod))
+}))
+levels(gene_partition)[module_order] = seq(nlevels(gene_partition))
+gene_partition = factor(gene_partition,levels = seq(nlevels(gene_partition)))
+rm(module_order)
+```
+### Visualize Heatmap
+```{r}
+p = pheatmap(as.matrix(dist),
+              annotation_col = data.frame(Module = gene_partition), 
+              cluster_rows = gene_hree, 
+              cluster_cols = gene_hree,
+              ann_colors = list(Module = setNames(colorRampPalette(brewer.pal(12, "Paired"))(nlevels(gene_partition)),levels(gene_partition))),
+              treeheight_row = 0,
+              col=colorRampPalette(c("red","white","blue4"))(99),
+              show_colnames = FALSE, 
+              show_rownames = FALSE,
+              main = paste(distance_method,
+                           clustering_method,sep = "-"),
+              silent = TRUE )
+as.ggplot(p)
+```
+
+## Step2: Computing Per-Cell Module Activity Scores
+```{r}
+knn = 10; major_vote = 5
+A = Symmetric_KNN_graph(knn = knn, feature_space = feature_space)[[2]]
+cell_block_loop = lapply(1:100,function(loop){
+  cat("\n",loop,"\n")
+  GMM_subsampling(seed = loop, gene_partition, expr_dat = dat, cell_kNN_graph = A, major_vote)
+})
+cell_block_prop = Reduce(`+`, cell_block_loop) / length(cell_block_loop)
+cell_block = cell_block_prop
+```
+### Visualize Module on Cell embeddings
+```{r}
+pl = lapply(levels(gene_partition),function(module){
+  FeaturePlot_custom(value = cell_block[,module], coord = visual_space, value_name = "Module Score",title_name = sprintf("Module %s (%d genes)",module, sum(gene_partition == module)))
+})
+plot_grid(plotlist = pl,ncol = 10) # may takes long time to plot
+```
+## Step3: Identify Celltype-specific activated Modules
+```{r}
+# Create one-hot vector of Cell Type
+one_hot_matrix <- sapply(unique(cell_label), function(x) as.integer(cell_label == x))
+
+# Order Cell Type based on its centroid in Featurespace
+Idents(tiss) = cell_label
+ordered_cell_types <- unique(cell_label)[hclust(dist(t(sapply(unique(cell_label), function(x) colMeans(Embeddings(tiss, reduction = "pca")[WhichCells(tiss, idents = x), ,drop = FALSE]) ))))$order]
+
+# Calculate Jaccard index between module activity & cell type
+jaccard_index <- apply(cell_block, 2, function(module_col) {
+  apply(one_hot_matrix, 2, function(one_hot_col) {
+    1 - philentropy::distance(rbind(module_col,one_hot_col), method = "jaccard")
+  })
+})
+```
+
+### Visualize Heatmap of Jaccard Index Matrix
+```{r}
+pheatmap(jaccard_index[rev(ordered_cell_types),], 
+         cluster_rows=FALSE, cluster_cols=FALSE, 
+         scale = "none", 
+         color = colorRampPalette(rev(c("firebrick3", "white", "navy")))(100))
+```
+
+### Visualize How CellType-Module is Matched on Cell Embeddings
+For each cell type, select the most specific modules for visualization (maximum jaccard index)
+```{r}
+tiss@meta.data = cbind(tiss@meta.data,one_hot_matrix)
+jaccard_thred = 0.4
+
+# Get Module plot
+pl_module = lapply(levels(gene_partition),function(module){
+  FeaturePlot_custom(value = cell_block[,module], coord = visual_space, value_name = "Module Score",title_name = sprintf("Module %s (%d genes)",module, sum(gene_partition == module)))
+})
+names(pl_module) = levels(gene_partition)
+
+# Get CellType One-hot plot
+pl_ct = lapply(colnames(one_hot_matrix),function(ct){
+  FeaturePlot_custom(value = as.factor(one_hot_matrix[,ct]), coord = visual_space, value_name = "Indicator",title_name = ct)
+})
+names(pl_ct) = colnames(one_hot_matrix)
+
+pl <- lapply(rownames(jaccard_index)[rev(order(apply(jaccard_index,1,max)))], function(celltype){
+  if(max(jaccard_index[celltype,]) > jaccard_thred){
+    p1 = pl_ct[[celltype]]
+    module_name = colnames(jaccard_index)[which.max(jaccard_index[celltype,])]
+    p2 = pl_module[[module_name]]
+    p = as.ggplot(p1) + as.ggplot(p2) + plot_annotation(paste0("Jaccard Index: ",round(jaccard_index[celltype,module_name],2)))
+    p
+  }
+})
+```
+### Annotate Each Celltype-specific activated Modules with its corresponding Celltypes
+```{r}
+module_celltype = apply(jaccard_index,2,function(x){paste(names(which(x > 0.4)),collapse = ",")})
+```
+
+
+## Step4: Module Enrichment Analysis
+### GO enrichment Analysis
+```{r}
+if (!requireNamespace("clusterProfiler", quietly = TRUE)) BiocManager::install("clusterProfiler")
+library(clusterProfiler)
+
+# Set all genes(after filtering) in the expression matrix as background,
+# such that the enrichment result of any module is not attributed to its high expression levels
+universe_df = data.frame("symbol" = rownames(dat),"entrez" = mapIds(org.Mm.eg.db, keys=rownames(dat), column="ENTREZID", keytype="SYMBOL"))
+
+# Filter GO terms based on p values < 0.05
+ego_result <- lapply(1:nlevels(gene_partition), function(i){
+  enrichGO(gene = names(gene_partition)[gene_partition == i],
+           OrgDb = 'org.Mm.eg.db', # mouse
+           keyType = "SYMBOL",
+           ont = "ALL",
+           pAdjustMethod = "BH",
+           universe = universe_df$symbol,
+           pvalueCutoff = 0.05)
+})
+
+# Only keep modules which has at lease one GO term having adjusted p-value < 0.05
+top_go_clusters <- which(sapply(ego_result, function(x)
+  (x@result$p.adjust[1] < 0.05)))
+
+# Annotate each modules with top5 GO terms
+top_enrich_go <- lapply(top_go_clusters, function(i) ego_result[[i]]@result[1:5,])
+```
+
+### Reactome enrichment Analysis
+```{r}
+if (!requireNamespace("ReactomePA", quietly = TRUE)) BiocManager::install("ReactomePA")
+if (!requireNamespace("org.Mm.eg.db", quietly = TRUE)) BiocManager::install("org.Mm.eg.db")
+library("clusterProfiler")
+library("ReactomePA")
+library("org.Mm.eg.db")
+
+# Set all genes(after filtering) in the expression matrix as background,
+# such that the enrichment result of any module is not attributed to its high expression levels
+universe_df = data.frame("symbol" = rownames(dat),"entrez" = mapIds(org.Mm.eg.db, keys=rownames(dat), column="ENTREZID", keytype="SYMBOL"))
+universe_df = universe_df[!is.na(universe_df$entrez),]
+
+# Filter Pathway based on p values < 0.05
+epathway_result <- lapply(1:nlevels(gene_partition), function(i){
+  enrichPathway(gene=universe_df[universe_df$symbol %in% names(gene_partition)[gene_partition == i],"entrez"],
+                organism = "mouse",
+                pAdjustMethod = "BH",
+                pvalueCutoff = 0.05,
+                universe = universe_df$entrez)
+})
+
+# Only keep modules which has at lease one Pathway having adjusted p-value < 0.05
+top_pathway_clusters <- which(sapply(epathway_result, function(x) 
+  (x@result$p.adjust[1] < 0.05)))
+
+# Annotate each modules with top5 Pathway terms
+top_enrich_pathway <- lapply(top_pathway_clusters, function(i) epathway_result[[i]]@result[1:5,])
+```
+
+## Step5: Generate Gene Module Annotation Table
+```{r}
+df_module = data.frame(Module = levels(gene_partition))
+df_module[,"Gene"] = unlist(lapply(levels(gene_partition),function(x){paste(names(gene_partition)[gene_partition == x],collapse = ",")}))
+df_module[,"celltype"] = module_celltype[levels(gene_partition)]
+df_module[top_go_clusters,"GO_description"] = unlist(lapply(top_enrich_go,function(x) paste(x[['Description']],collapse = ",")))
+df_module[top_pathway_clusters,"Pathway_description"] = unlist(lapply(top_enrich_pathway,function(x) paste(x[['Description']],collapse = ",")))
+df_module[is.na(df_module)] = ""
+write.csv(df_module,file = "module_description.csv",row.names = FALSE)
+```
+
+
+
+
+
+
+
