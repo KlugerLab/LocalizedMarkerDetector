@@ -1,7 +1,7 @@
 cran_packages <- c("igraph","ggplot2", "cowplot", "RColorBrewer", 
                    "data.table", "dplyr", "patchwork", 
                    "pheatmap", "ggplotify", "ggraph", 
-                   "ClusterR","Rcpp","RcppArmadillo")
+                   "ClusterR", "Rcpp", "RcppArmadillo", "tictoc")
 sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 lapply(cran_packages, require, character.only = TRUE)
 
