@@ -7,26 +7,36 @@ bibliography: references.bib
 ---
 
 # Install & Load Packages
+
 ```{r}
 # Install necessary tools if not already present
 if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
 if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
 # Define package lists
-bioc_packages <- c("Seurat")
-github_packages <- c("satijalab/SeuratWrappers")
+bioc_packages <- c("Seurat",
+                   "clusterProfiler", "AnnotationDbi", "ReactomePA", "org.Mm.eg.db")
+github_packages <- c("satijalab/seurat-wrappers")
+# Note: repeating packages from LMD_function.R as knitr does not install them properly
+cran_packages <- c("igraph","ggplot2", "cowplot", "RColorBrewer",
+                   "data.table", "dplyr", "patchwork",
+                   "pheatmap", "ggplotify", "ggraph",
+                   "ClusterR", "Rcpp", "RcppArmadillo", "tictoc")
 
 # Install packages
 sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
 sapply(github_packages, function(pkg) if (!requireNamespace(strsplit(pkg, "/")[[1]][2], quietly = TRUE)) remotes::install_github(pkg))
+sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 
 library("Seurat")
 library("SeuratWrappers")
 ```
 
 # Preparing input data
+
 ```{r}
 # If load url doesn't work, please download it and load from your working directory
-load(url("https://figshare.com/ndownloader/files/13092380"))
+#load(url("https://figshare.com/ndownloader/files/13092380"))
+load('facs_Marrow_seurat_tiss.Robj')
 tiss <- UpdateSeuratObject(tiss)
 ```
 We obtain the following objects from this Seurat Obj:
@@ -42,7 +52,9 @@ visual_space = data.frame(tiss@reductions$tsne@cell.embeddings)
 dat = as.matrix(tiss[[DefaultAssay(tiss)]]@data)
 cell_label = tiss$cell_ontology_class
 ```
+
 We process the `dat` by only keep the genes detected in more than 10 cells and less than 50% of cells (genes is "detected" in a cell only if its expression level is greater than the median expression level of that cell)
+
 ```{r}
 Gene_detected_count <- apply(dat > apply(dat,2,median),1,sum)
 selected_genes = (Gene_detected_count >= 10) & (Gene_detected_count <= ncol(dat) * 0.5)
@@ -50,11 +62,15 @@ dat = dat[selected_genes,,drop = FALSE]
 ```
 
 # Running LMD Step by Step
+
 This provides a step-by-step tutorial for a better understanding of the algorithm. If you want to generate results directly, please skip to 'Running LMD in One Step'
+
 ```{r}
 source("./LMD_function.R", echo = F)
 ```
+
 ## Step1: Build KNN Graph
+
 ```{r}
 # Construct knn graph
 res = Symmetric_KNN_graph(knn = 5, feature_space = feature_space)
@@ -67,6 +83,7 @@ plot_knn_graph(affinity_m = W, label = cell_label, layout = visual_space)
 ```
 
 ## Step2: Diffuse Genes on the cell graph
+
 ```{r}
 # Generate $P^{t}, t = 2,4,8,...,max_time$
 P_ls = Obtain_Pls(W = W, max_time = 2^10)
@@ -78,6 +95,7 @@ print(FeaturePlot_diffusion(coord = visual_space,init_state = rho[gene,],P_ls = 
 ```
 
 ## Step3: Obtain Diffusion KL score & Cumulative score
+
 ```{r}
 # Obtain diffusion KL score
 res = fast_calculate_multi_score(W = W, init_state = rho, P_ls = P_ls)
@@ -92,12 +110,15 @@ show_result_lmd(res,n = 10)
 ```
 
 # Running LMD in one step
+
 ```{r}
 res = LMD(dat,feature_space)
 ```
 
 # Identify Gene Modules
+
 ## Step1: Deriving Gene Modules
+
 ```{r}
 # Select top1000 genes as local genes
 local_gene = show_result_lmd(res, n = 1000)
@@ -134,7 +155,9 @@ levels(gene_partition)[module_order] = seq(nlevels(gene_partition))
 gene_partition = factor(gene_partition,levels = seq(nlevels(gene_partition)))
 rm(module_order)
 ```
+
 ### Visualize Heatmap
+
 ```{r}
 p = pheatmap(as.matrix(dist),
               annotation_col = data.frame(Module = gene_partition), 
@@ -152,6 +175,7 @@ as.ggplot(p)
 ```
 
 ## Step2: Computing Per-Cell Module Activity Scores
+
 ```{r}
 knn = 10; major_vote = 5
 A = Symmetric_KNN_graph(knn = knn, feature_space = feature_space)[[2]]
@@ -162,14 +186,18 @@ cell_block_loop = lapply(1:100,function(loop){
 cell_block_prop = Reduce(`+`, cell_block_loop) / length(cell_block_loop)
 cell_block = cell_block_prop
 ```
+
 ### Visualize Module on Cell embeddings
+
 ```{r}
 pl = lapply(levels(gene_partition),function(module){
   FeaturePlot_custom(value = cell_block[,module], coord = visual_space, value_name = "Module Score",title_name = sprintf("Module %s (%d genes)",module, sum(gene_partition == module)))
 })
 plot_grid(plotlist = pl,ncol = 10) # may takes long time to plot
 ```
+
 ## Step3: Identify Celltype-specific activated Modules
+
 ```{r}
 # Create one-hot vector of Cell Type
 one_hot_matrix <- sapply(unique(cell_label), function(x) as.integer(cell_label == x))
@@ -187,6 +215,7 @@ jaccard_index <- apply(cell_block, 2, function(module_col) {
 ```
 
 ### Visualize Heatmap of Jaccard Index Matrix
+
 ```{r}
 pheatmap(jaccard_index[rev(ordered_cell_types),], 
          cluster_rows=FALSE, cluster_cols=FALSE, 
@@ -195,7 +224,9 @@ pheatmap(jaccard_index[rev(ordered_cell_types),],
 ```
 
 ### Visualize How CellType-Module is Matched on Cell Embeddings
+
 For each cell type, select the most specific modules for visualization (maximum jaccard index)
+
 ```{r}
 tiss@meta.data = cbind(tiss@meta.data,one_hot_matrix)
 jaccard_thred = 0.4
@@ -222,17 +253,23 @@ pl <- lapply(rownames(jaccard_index)[rev(order(apply(jaccard_index,1,max)))], fu
   }
 })
 ```
+
 ### Annotate Each Celltype-specific activated Modules with its corresponding Celltypes
+
 ```{r}
 module_celltype = apply(jaccard_index,2,function(x){paste(names(which(x > 0.4)),collapse = ",")})
 ```
 
-
 ## Step4: Module Enrichment Analysis
+
 ### GO enrichment Analysis
+
 ```{r}
-if (!requireNamespace("clusterProfiler", quietly = TRUE)) BiocManager::install("clusterProfiler")
-library(clusterProfiler)
+library("clusterProfiler")
+library("ReactomePA")
+library("org.Mm.eg.db")
+library("AnnotationDbi")
+
 
 # Set all genes(after filtering) in the expression matrix as background,
 # such that the enrichment result of any module is not attributed to its high expression levels
@@ -258,10 +295,8 @@ top_enrich_go <- lapply(top_go_clusters, function(i) ego_result[[i]]@result[1:5,
 ```
 
 ### Reactome enrichment Analysis
+
 ```{r}
-if (!requireNamespace("ReactomePA", quietly = TRUE)) BiocManager::install("ReactomePA")
-if (!requireNamespace("org.Mm.eg.db", quietly = TRUE)) BiocManager::install("org.Mm.eg.db")
-library("clusterProfiler")
 library("ReactomePA")
 library("org.Mm.eg.db")
 
@@ -288,6 +323,7 @@ top_enrich_pathway <- lapply(top_pathway_clusters, function(i) epathway_result[[
 ```
 
 ## Step5: Generate Gene Module Annotation Table
+
 ```{r}
 df_module = data.frame(Module = levels(gene_partition))
 df_module[,"Gene"] = unlist(lapply(levels(gene_partition),function(x){paste(names(gene_partition)[gene_partition == x],collapse = ",")}))
@@ -297,10 +333,3 @@ df_module[top_pathway_clusters,"Pathway_description"] = unlist(lapply(top_enrich
 df_module[is.na(df_module)] = ""
 write.csv(df_module,file = "module_description.csv",row.names = FALSE)
 ```
-
-
-
-
-
-
-
