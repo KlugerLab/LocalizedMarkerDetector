@@ -23,9 +23,9 @@ cran_packages <- c("igraph","ggplot2", "cowplot", "RColorBrewer",
                    "ClusterR", "Rcpp", "RcppArmadillo", "tictoc")
 
 # Install packages
+sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
 sapply(github_packages, function(pkg) if (!requireNamespace(strsplit(pkg, "/")[[1]][2], quietly = TRUE)) remotes::install_github(pkg))
-sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 
 library("Seurat")
 library("SeuratWrappers")
@@ -34,13 +34,17 @@ library("SeuratWrappers")
 # Preparing input data
 
 ```{r}
-# If load url doesn't work, please download it and load from your working directory
-#load(url("https://figshare.com/ndownloader/files/13092380"))
+if (!file.exists('facs_Marrow_seurat_tiss.Robj')) {
+   # If load url doesn't work, please download it and load from your working directory
+  options(timeout=6000) 
+  download.file("https://figshare.com/ndownloader/files/13092380", 
+                destfile = 'facs_Marrow_seurat_tiss.Robj', method = 'libcurl')
+ }
 load('facs_Marrow_seurat_tiss.Robj')
 tiss <- UpdateSeuratObject(tiss)
 ```
 We obtain the following objects from this Seurat Obj:
-* `feature_space`: The output of PCA. This matrix contains the first 20 pricipal components (PCs).
+* `feature_space`: The output of PCA. This matrix contains the first 20 principal components (PCs).
 * `visual_space`: a data.frame with t-SNE coordinates (2D) based on the first 20 PCs.
 * `dat`: a matrix object with the log-normalized expression of genes (rows) in each cell (columns)
 * `cell_label`: Any metadata you wish to visualize and examine related to cells (here we take the cell type annotation)
