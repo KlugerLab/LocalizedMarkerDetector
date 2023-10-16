@@ -77,10 +77,10 @@ source("./LMD_function.R", echo = F)
 
 ```{r}
 # Construct knn graph
-res = Symmetric_KNN_graph(knn = 5, feature_space = feature_space)
+knn_result = Symmetric_KNN_graph(knn = 5, feature_space = feature_space)
 
-A = res$adj_matrix # Adjacency Matrix
-W = res$graph # Symmetrized Graph ((A + AT) / 2)
+A = knn_result$adj_matrix # Adjacency Matrix
+W = knn_result$graph # Symmetrized Graph ((A + AT) / 2)
 
 # Plot knn graph
 plot_knn_graph(affinity_m = W, label = cell_label, layout = visual_space)
@@ -102,21 +102,21 @@ print(FeaturePlot_diffusion(coord = visual_space,init_state = rho[gene,],P_ls = 
 
 ```{r}
 # Obtain diffusion KL score
-res = fast_calculate_multi_score(W = W, init_state = rho, P_ls = P_ls)
+score_result = fast_calculate_multi_score(W = W, init_state = rho, P_ls = P_ls)
 
 # Check Diffusion KL pattern for several genes
 genes = c("Tlr11","Fcnb","Cd79a","4933425H06Rik","Uchl4","Dock11")
 genes_label = rep(c("good","bad"),each = 3)
-Visualize_score_pattern(res, genes = genes, label_class = genes_label, facet_class = NULL)
+Visualize_score_pattern(score_result, genes = genes, label_class = genes_label, facet_class = NULL)
 
 # Show result
-show_result_lmd(res,n = 10)
+show_result_lmd(score_result,n = 10)
 ```
 
 # Running LMD in one step
 
 ```{r}
-res = LMD(dat,feature_space)
+lmd_result = LMD(dat, feature_space)
 ```
 
 # Identify Gene Modules
@@ -125,7 +125,7 @@ res = LMD(dat,feature_space)
 
 ```{r}
 # Select top1000 genes as local genes
-local_gene = show_result_lmd(res, n = 1000)
+local_gene = show_result_lmd(lmd_result, n = 1000)
 local_gene = rownames(local_gene)
 
 # Denoising
@@ -169,7 +169,7 @@ p = pheatmap(as.matrix(dist),
               cluster_cols = gene_hree,
               ann_colors = list(Module = setNames(colorRampPalette(brewer.pal(12, "Paired"))(nlevels(gene_partition)),levels(gene_partition))),
               treeheight_row = 0,
-              col=colorRampPalette(c("red","white","blue4"))(99),
+              col=colorRampPalette(c("red","blue4"))(99),
               show_colnames = FALSE, 
               show_rownames = FALSE,
               main = paste(distance_method,
