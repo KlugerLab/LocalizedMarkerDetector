@@ -184,7 +184,6 @@ as.ggplot(p)
 knn = 10; major_vote = 5
 A = Symmetric_KNN_graph(knn = knn, feature_space = feature_space)[[2]]
 cell_block_loop = lapply(1:100,function(loop){
-  cat("\n",loop,"\n")
   GMM_subsampling(seed = loop, gene_partition, expr_dat = dat, cell_kNN_graph = A, major_vote)
 })
 cell_block_prop = Reduce(`+`, cell_block_loop) / length(cell_block_loop)
@@ -213,7 +212,7 @@ ordered_cell_types <- unique(cell_label)[hclust(dist(t(sapply(unique(cell_label)
 # Calculate Jaccard index between module activity & cell type
 jaccard_index <- apply(cell_block, 2, function(module_col) {
   apply(one_hot_matrix, 2, function(one_hot_col) {
-    1 - philentropy::distance(rbind(module_col,one_hot_col), method = "jaccard")
+    1 - philentropy::distance(rbind(module_col,one_hot_col), method = "jaccard", mute.message=TRUE)
   })
 })
 ```
