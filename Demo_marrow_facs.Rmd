@@ -88,7 +88,7 @@ plot_knn_graph(affinity_m = W, label = cell_label, layout = visual_space)
 
 ## Step2: Diffuse Genes on the cell graph
 
-```{r}
+```{r, fig.width=20}
 # Generate $P^{t}, t = 2,4,8,...,max_time$
 P_ls = Obtain_Pls(W = W, max_time = 2^10)
 # Generate initial gene distribution
@@ -192,7 +192,7 @@ cell_block = cell_block_prop
 
 ### Visualize Module on Cell embeddings
 
-```{r}
+```{r, fig.width=40}
 pl = lapply(levels(gene_partition),function(module){
   FeaturePlot_custom(value = cell_block[,module], coord = visual_space, value_name = "Module Score",title_name = sprintf("Module %s (%d genes)",module, sum(gene_partition == module)))
 })
