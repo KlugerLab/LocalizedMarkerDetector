@@ -249,7 +249,7 @@ FeaturePlot_custom <- function(value,coord,value_name = NULL,title_name = NULL){
   }
   p = p + theme(legend.title = element_text(size = 8),
           panel.grid = element_blank(),
-          panel.background = element_blank()) + labs(color = value_name) + ggtitle(title_name)
+          panel.background = element_blank()) + labs(color = value_name) + ggtitle(title_name) + coord_fixed()
   return(p)
 }
 FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, check_time = NULL, gene_name = NULL){
