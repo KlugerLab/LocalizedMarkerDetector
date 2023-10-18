@@ -1,0 +1,424 @@
+---
+title: "Marker_identification_Benchmark"
+output: pdf_document
+date: '2023-10-16'
+---
+# Load Packages
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+if (!requireNamespace("BiocManager", quietly = TRUE)) BiocManager::install("Seurat")
+if (!requireNamespace("readxl", quietly = TRUE)) install.packages("readxl")
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+
+library("Seurat")
+library("dplyr")
+```
+
+# Load Data & Process
+## Load Data
+```{r}
+path <- "/data/ruiqi/local_marker/dataset/tabular_muris"
+tiss <- readRDS(paste0(path,"/marrow_facs.rds"))
+```
+## Process
+```{r}
+DefaultAssay(tiss) <- "RNA"
+n_dim = dim(tiss@reductions$pca@cell.embeddings)[2]
+feature_space = as.matrix(tiss@reductions$pca@cell.embeddings[,1:n_dim])
+visual_space = data.frame(tiss@reductions$tsne@cell.embeddings)
+dat = as.matrix(tiss[[DefaultAssay(tiss)]]@data)
+cell_label = tiss$cell_ontology_class
+
+Gene_detected_count <- apply(dat > apply(dat,2,median),1,sum)
+selected_genes = (Gene_detected_count >= 10) & (Gene_detected_count <= ncol(dat) * 0.5)
+selected_genes = names(selected_genes)[selected_genes]
+dat = dat[selected_genes,,drop = FALSE]
+raw_count = as.matrix(tiss@assays$RNA@counts)[selected_genes,,drop = FALSE]
+total_count = tiss@meta.data$nCount_RNA
+```
+
+# Define Ground truth Marker
+## Criterion1: Fold-change
+For each gene, sorting cell types by mean expression for each gene and computing fold changes between consecutive types, take the maximum value among the N-1 fold change values, given N cell types.
+```{r}
+path = "./benchmark_result/"
+tissue_name = "marrow_facs"
+```
+
+```{r}
+avg_exp = AverageExpression(subset(tiss,features = selected_genes), assays = "RNA", slot = "counts", group.by = "cell_ontology_class") %>% as.data.frame()
+
+avg_exp_ordered <- avg_exp %>%
+  rowwise() %>%
+  mutate(cell_order_val = list(sort(c_across(everything()), decreasing = FALSE))) %>%
+  ungroup()
+
+avg_exp_ordered = avg_exp_ordered %>%
+  rowwise() %>%
+  mutate(log_fold_change = list(c(NA, diff(log2(unlist(cell_order_val)+1))))) %>%
+  ungroup()
+
+max_logfc = unlist( lapply(avg_exp_ordered$log_fold_change,function(vec){max(vec,na.rm = TRUE)}) )
+names(max_logfc) = rownames(avg_exp)
+
+max_logfc = sort(max_logfc,decreasing = TRUE)
+write.table(max_logfc,file = paste0(path,tissue_name,"_ground_truth_c1.txt"))
+```
+## Criterion2: CellMarkerDB
+Downloaded marker from http://bio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_download_files/file/Cell_marker_Seq.xlsx
+PanglaoDB: https://panglaodb.se/markers/PanglaoDB_markers_27_Mar_2020.tsv.gz and exclude genes that reported only once
+```{r}
+# Load CellMarkerDB
+cell_marker_db = readxl::read_xlsx("/data/ruiqi/local_marker/dataset/Cell_Marker/Cell_marker_All.xlsx") %>% filter(species == "Mouse") %>% filter(tissue_class == "Bone marrow") %>% filter(!is.na(cellontology_id)) %>% filter(!is.na(PMID)) %>% mutate(gene_name1 = marker) %>% mutate(gene_name2 = Symbol) %>% select(c("gene_name1","gene_name2")) %>% group_by(across(everything())) %>% dplyr::summarise(count = n(), .groups = "drop") %>% filter(count > 1)
+
+# Match gene name
+celldb_marker = union(cell_marker_db$gene_name1,cell_marker_db$gene_name2)
+celldb_marker = unlist( lapply(celldb_marker,function(i){
+  id = grep(paste0("^", i, "$"), selected_genes, ignore.case = TRUE)
+  if(length(id)==0){return(NA)}
+  else{return(selected_genes[id])}
+}) )
+celldb_marker = celldb_marker[!is.na(celldb_marker)] %>% unique()
+write.table(celldb_marker,file = paste0(path,tissue_name,"_ground_truth_c2.txt"))
+```
+
+# Run Each Method and save results
+```{r}
+path = "./benchmark_result/"
+tissue_name = "marrow_facs"
+tissue_name = "lung_facs"
+```
+
+## LocalMarkerDetector
+Genes were ranked by the increasing order of Cumulative Diffusion-KL score
+```{r}
+method = "lmd"
+source("./LMD_function.R", echo = F)
+res = LMD(dat,feature_space,max_time = 2^10)
+marker = show_result_lmd(res, n = length(selected_genes))
+marker[order(marker$score),'rank'] = 1:nrow(marker)
+write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = TRUE)
+```
+
+## Seurat v3 Wilcoxon unfiltered
+Genes were ranked by their lowest adjusted P-value in any cluster (increasing order), if two genes had the same, prioritize genes with larger FC.
+```{r}
+tiss <- FindNeighbors(tiss, dims = 1:n_dim)
+tiss <- FindClusters(tiss, resolution = 1.5, algorithm = 3)
+method = "wilcox_no_filter"
+marker <- FindAllMarkers(tiss, features = rownames(dat), only.pos = FALSE, test.use = "wilcox", logfc.threshold = 0, min.pct = 0)
+gene_rank = marker %>% arrange(.,p_val_adj,desc(avg_log2FC)) %>% distinct(.,gene, .keep_all = TRUE) %>% select(gene)
+gene_rank$'rank' = 1:nrow(gene_rank)
+marker <- merge(marker,gene_rank,by = "gene")
+write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = TRUE)
+```
+## Seurat v3 default
+Genes were ranked by their lowest adjusted P-value in any cluster (increasing order), if two genes had the same, prioritize genes with larger FC.
+```{r}
+tiss <- FindNeighbors(tiss, dims = 1:n_dim)
+tiss <- FindClusters(tiss, resolution = 1.5, algorithm = 3)
+
+method = "wilcox_default"
+marker <- FindAllMarkers(tiss, features = rownames(dat), only.pos = FALSE, test.use = "wilcox", logfc.threshold = 0.25,min.pct = 0.1)
+
+gene_rank = marker %>% arrange(.,p_val_adj,desc(avg_log2FC)) %>% distinct(.,gene, .keep_all = TRUE) %>% select(gene)
+gene_rank$'rank' = 1:nrow(gene_rank)
+marker <- merge(marker,gene_rank,by = "gene")
+write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = TRUE)
+```
+## singleCellHaystack
+https://alexisvdb.github.io/singleCellHaystack/articles/examples/a02_example_scRNAseq.html
+Genes were ranked based on the increasing order of log(adjusted P-value)
+```{r}
+method = "haystack"
+library(singleCellHaystack)
+set.seed(123)
+res <- haystack(x = feature_space, expression = dat)
+marker <- show_result_haystack(res.haystack = res)
+marker[order(marker$log.p.adj),"rank"] = 1:nrow(marker)
+
+write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = TRUE)
+```
+## SEMITONES
+https://github.com/ohlerlab/SEMITONES/tree/master
+https://github.com/ohlerlab/SEMITONES_paper/blob/main/notebooks/10_SEMITONES_benchmark_corrected.ipynb
+
+Genes were ranked by their lowest adjusted P-value in any reference cell (increasing order), if two genes had the same p.adj, prioritize genes with larger absolute enrichment score in any reference cell.
+```{python}
+import SEMITONES
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from SEMITONES.cell_selection import from_knn_dist
+from SEMITONES.cell_selection import from_gui
+from SEMITONES.cell_selection import from_2D_embedding
+from SEMITONES.cell_selection import get_cells_from_gui
+from sklearn.metrics.pairwise import pairwise_kernels
+from SEMITONES.enrichment_scoring import calculate_escores
+from SEMITONES.enrichment_scoring import permute
+from SEMITONES.enrichment_scoring import sig_interval
+from SEMITONES.support_funcs import pairwise_similarities
+from SEMITONES.support_funcs import sig_dictionary
+from SEMITONES.support_funcs import sig_bool
+from SEMITONES.enrichment_scoring import pvals_per_cell
+
+# Load data
+data = pd.DataFrame(r.dat.T)  # counts
+PC20 = pd.DataFrame(r.feature_space)
+# Reference Cell
+g = 8.6e-4  
+S = pairwise_kernels(PC20, metric="rbf", gamma=g) 
+median = np.median(S, axis=0)
+start = int(np.argmin(median))
+num_refcell = int(data.shape[1]*0.005)
+dd_rcells = from_knn_dist(X=PC20, 
+                          n_ret=num_refcell,
+                          start=start, 
+                          metric="rbf",
+                          metric_params={"gamma": g})
+S = pairwise_similarities(PC20,
+                          query=dd_rcells,
+                          metric="rbf",
+                          metric_params={"gamma": g})
+dd_rcells = data.index[dd_rcells]
+escores = calculate_escores(data.values, query=dd_rcells, S=S)
+
+# semi_ranks = escores.abs().rank(ascending=False, method="dense").min(1)
+
+P = permute(data.values)
+pscores = calculate_escores(P, query=dd_rcells, S=S)
+pvals = pvals_per_cell(escores,pscores,ret = "q")
+# semi_ranks = pvals.min(1).rank(ascending=True, method="dense")
+
+result = pd.DataFrame({'escore': escores.abs().max(1), 'padj': pvals.min(1)})
+```
+```{r}
+method = "semi"
+marker = reticulate::py$result
+rownames(marker) = rownames(dat)
+marker = marker %>% arrange(.,padj,desc(escore))
+marker$'rank' = 1:nrow(marker)
+
+write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = TRUE)
+```
+
+## Hotspot
+https://hotspot.readthedocs.io/en/latest/CD4_Tutorial.html
+Genes were ranked by the increasing order FDR value (if two genes had the same, prioritize genes with larger Z-score).
+```{r}
+cell_id = colnames(raw_count)
+gene_id = rownames(raw_count)
+```
+```{python}
+import hotspot
+import scanpy as sc
+import pandas as pd
+from scipy.sparse import csc_matrix
+adata = sc.AnnData(X = r.raw_count.T,obs = pd.DataFrame(index = r.cell_id), var = pd.DataFrame(index = r.gene_id))
+adata.obs['total_counts'] = r.total_count
+adata.layers["counts"] = adata.X.copy()
+adata.obsm['X_pca'] = r.feature_space
+adata.layers["counts_csc"] = csc_matrix(adata.layers["counts"])
+
+hs = hotspot.Hotspot(
+    adata,
+    layer_key="counts_csc",
+    model='danb',
+    latent_obsm_key="X_pca",
+    umi_counts_obs_key="total_counts"
+)
+hs.create_knn_graph(weighted_graph=False, n_neighbors=30)
+
+# Determining informative genes
+hs_results = hs.compute_autocorrelations()
+```
+```{r}
+method = "hotspot"
+marker = reticulate::py$hs_results
+marker[order(marker$FDR),"rank"] = 1:nrow(marker)
+write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = TRUE)
+```
+
+## Marcopolo
+The rank of genes is given by `Marcopolo_rank`
+```{python}
+import pickle
+import numpy as np
+import pandas as pd
+import torch
+import anndata as ad
+import scanpy as sc
+import matplotlib.pyplot as plt
+import MarcoPolo
+
+adata = sc.AnnData(X = r.raw_count.T)
+
+if "size_factor" not in adata.obs.columns:
+    norm_factor = sc.pp.normalize_total(adata, exclude_highly_expressed=True, max_fraction= 0.2, inplace=False)["norm_factor"]
+    adata.obs["size_factor"] = norm_factor/norm_factor.mean()
+    print("size factor was calculated")
+    
+regression_result = MarcoPolo.run_regression(adata=adata, size_factor_key="size_factor",
+                         num_threads=1, device="cpu")
+
+result = MarcoPolo.find_markers(adata=adata, regression_result=regression_result)
+```
+```{r}
+method = "marcopolo"
+marker = reticulate::py$result
+marker$'rank' = marker$MarcoPolo_rank
+write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = TRUE)
+```
+
+## Highly Variable Genes
+```{r}
+method = "hvg"
+
+DefaultAssay(tiss) <- "RNA"
+# tiss <- NormalizeData(tiss, normalization.method = "LogNormalize", scale.factor = 1e6)
+marker <- subset(tiss,features = selected_genes) %>% ScaleData(features = selected_genes) %>% 
+  FindVariableFeatures(nfeatures = 5000) %>% VariableFeatures() %>% as.data.frame() %>% setNames(c("gene")) %>% mutate(rank = 1:n())
+
+write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = FALSE)
+```
+
+
+# Integrate rank from all methods into one dataframe
+```{r}
+path = "./benchmark_result/"
+tissue_name = "marrow_facs"
+```
+```{r}
+method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg")
+method_fullname = setNames(c("LMD","singleCellHaystack","Hotspot","Marcopolo","SEMITONES","Seurat v3 default", "Seurat v3 Wilcoxon unfiltered","HighlyVariableGenes"),method_ls)
+
+df_benchmark = do.call(cbind,lapply(method_ls, function(method){
+  marker = read.table(sprintf("%s%s_%s.csv",path,method,tissue_name),header = TRUE)
+  if("gene" %in% colnames(marker)){
+    return(marker$rank[match(selected_genes,marker$gene)])
+  }else{
+    return(marker$rank[match(selected_genes,rownames(marker))])
+  }
+}))
+df_benchmark[is.na(df_benchmark)] = nrow(df_benchmark)
+df_benchmark = data.frame(df_benchmark,row.names = selected_genes)
+colnames(df_benchmark) = method_ls
+
+write.table(df_benchmark,file = paste0(path,tissue_name,"_benchmark_rank_table.csv"),row.names = TRUE)
+```
+
+# AUROC
+```{r}
+path = "./benchmark_result/"
+tissue_name = "marrow_facs"
+df_benchmark = read.table(paste0(path,tissue_name,"_benchmark_rank_table.csv"))
+```
+```{r}
+max_logfc = read.table(paste0(path,tissue_name,"_ground_truth_c1.txt")) %>% rownames()
+celldb_marker = read.table(paste0(path,tissue_name,"_ground_truth_c2.txt"))[,1]
+
+gt_list = c(lapply(seq(50,1000,50),function(x) max_logfc[1:x]),list(celldb_marker))
+names(gt_list) = c(paste0("Top",seq(50,1000,50)),"CellMarkerDB")
+df = do.call(rbind,lapply(1:length(gt_list),function(i){
+  true_marker = gt_list[[i]]
+  df_benchmark$"gt" = 0
+  df_benchmark[true_marker,"gt"] = 1
+  
+  library(pROC)
+  roc_df = do.call(rbind,lapply(setdiff(colnames(df_benchmark),"gt"), function(method){
+    roc = roc(df_benchmark$gt, df_benchmark[,method], direction = ">")
+    data.frame(FPR = 1 - roc$specificities, TPR = roc$sensitivities, Method = method, AUROC = as.numeric(auc(roc)))
+  }) )
+  
+  df = roc_df %>% select(c("Method","AUROC")) %>% distinct()
+  df$'gt_set' = names(gt_list)[i]
+  df
+}))
+df$Method = as.factor(df$Method)
+levels(df$Method) = method_fullname[levels(df$Method)]
+df$gt_set = factor(df$gt_set,levels = names(gt_list))
+write.table(df,file = paste0(path,tissue_name,"_auroc.csv"),row.names = FALSE)
+```
+
+
+# Density Index
+```{r}
+path = "./benchmark_result/"
+tissue_name = "marrow_facs"
+```
+```{r}
+df_benchmark = read.table(paste0(path,tissue_name,"_benchmark_rank_table.csv"))
+
+score_measure =do.call(rbind,lapply(c(method_ls,"All genes"),function(method){
+  if(method == "All genes"){
+    top_gs = rownames(df_benchmark)
+    top_n = length(top_gs)
+  }else{
+    top_gs = rownames(df_benchmark)[order(df_benchmark[,method])]
+    top_n = c(seq(100,900,100),seq(1000,5000,1000))
+  }
+  result = unlist(lapply(top_n, function(top){
+    tiss <- RunPCA(tiss, features = top_gs[1:top], npcs = 20)
+    d = dist(Embeddings(tiss, reduction = "pca"))
+    c = as.integer(factor(tiss$cell_ontology_class[labels(d)]))
+    
+    # # Silhouette score
+    # s1 = mean(as.data.frame(cluster::silhouette(c, d)[,]) %>%
+    #   group_by(cluster) %>%
+    #   summarize(mean_silhouette = mean(sil_width)) %>%.$mean_silhouette)
+    
+    # Density-index
+    nn.dist = FNN::get.knn(Embeddings(tiss, reduction = "pca"), k = 10, algorithm = "kd_tree")$nn.dist
+    sdVec <- stats::na.omit(tiss@reductions$pca@stdev)
+    length_scale <- sqrt(sum(sdVec^2))
+    s2 = length_scale/mean(nn.dist)
+    
+    s2
+    
+  }))
+  # rownames(result) = c("Mean_SI","DI")
+  result = data.frame(TopGene = top_n,Method = method,DensityIndex = result)
+}) )
+
+write.table(score_measure,file = paste0(path,tissue_name,"_density_index.csv"),row.names = FALSE)
+```
+
+# Sensitivity Test (Try different K)
+```{r}
+path = "./marrow_result/"
+tissue_name = "marrow_facs"
+```
+```{r}
+# RunLMD under differen K
+score_df = do.call(cbind,lapply(c(3:10,20,30,40,50),function(kNN){
+  try({
+    res = LMD(dat,feature_space,knn = kNN)
+    return(res$cumulative_score)
+  },silent = TRUE)
+}))
+colnames(score_df) = paste0("kNN",c(3:10,20,30,40,50))
+write.table(score_df,file = paste0(path,tissue_name,"_different_knn.csv"),row.names = FALSE)
+```
+```{r}
+# Obtain AUROC
+score_ranked <- data.frame(score_df) %>% mutate(across(everything(), rank))
+
+max_logfc = read.table(paste0(path,tissue_name,"_ground_truth_c1.txt")) %>% rownames()
+celldb_marker = read.table(paste0(path,tissue_name,"_ground_truth_c2.txt"))[,1]
+
+gt_list = c(lapply(seq(50,1000,50),function(x) max_logfc[1:x]),list(celldb_marker))
+names(gt_list) = c(paste0("Top",seq(50,1000,50)),"CellMarkerDB")
+
+auc_df = apply(score_ranked,2,function(x){
+  unlist(lapply(gt_genes_list,function(genes){
+    roc = pROC::roc(as.integer(rownames(score_ranked) %in% genes), x, direction = ">")
+    pROC::auc(roc)
+  }))
+})
+auc_df = data.frame(auc_df,gt = names(gt_list))
+write.table(auc_df,file = paste0(path,tissue_name,"_sensitivity_auroc.csv"),row.names = FALSE)
+```
+
+
+
+
