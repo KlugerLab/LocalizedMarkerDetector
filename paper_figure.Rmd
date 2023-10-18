@@ -87,7 +87,7 @@ fig <- ggplot(df_auc, aes(x = gt_set, y = AUROC, fill = Method)) +
   theme_minimal() +
   labs(x = "Ground-Truth Genesets", y = "AUROC", fill = "Method") + coord_cartesian(ylim = c(0.5, 1)) +
   theme(legend.position = "bottom")  +  scale_fill_manual(values= coldef[names(coldef)%in%df_auc$Method])
-fig
+fig + ggtitle("Lung")
 ```
 
 # Fig - Enrichment Overlap of Prioritized Genes with CellMarker Database Confidence Markers
@@ -311,35 +311,28 @@ average_ranks <- data.frame(
 )
 average_ranks <- average_ranks %>% tidyr::pivot_longer(cols = -Top_Genes, names_to = "kNN", values_to = "Average_Rank")
 average_ranks$kNN = as.numeric(gsub("kNN","",average_ranks$kNN))
-fig = ggplot(data = average_ranks, aes(x = kNN, y = Average_Rank, colour = factor(Top_Genes), group = Top_Genes)) +
+
+fig = ggplot(data = average_ranks, aes(x = kNN, y = Average_Rank, group = Top_Genes)) +
   geom_line() +
-  geom_point() +
-  xlab("Top Genes") +
-  ylab(sprintf("Average Rank of Top # Genes\n (base on %s)",base)) +
-  theme_minimal() + facet_wrap(~Top_Genes,scales = "free")
+  geom_point() + labs(x = "kNN", y = sprintf("Average Rank of Top # Genes\n (base on %s)",base)) + geom_vline(xintercept = 5, color="red", linetype="dashed") +
+  theme_minimal() + facet_wrap(~Top_Genes,scales = "free",labeller = as_labeller(setNames(paste0("Top",unique(average_ranks$Top_Genes)),unique(average_ranks$Top_Genes)))) + NoLegend()
+pdf(width = 8,height = 5)
 fig
+dev.off()
 ```
 ```{r}
 ## AUC stability
-gt_genes_list <- c(lapply(c(50,seq(100,400,100)), function(x){
-  names(max_logfc)[1:x]
-}),list(true_marker))
-auc_df = apply(score_ranked,2,function(x){
-  unlist(lapply(gt_genes_list,function(genes){
-    roc = pROC::roc(as.integer(rownames(score_ranked) %in% genes), x, direction = ">")
-    pROC::auc(roc)
-  }))
-})
-auc_df = data.frame(auc_df,gt = c(paste0("top",c(50,seq(100,400,100))),"cellMarkerDB"))
-auc_df <- auc_df %>% tidyr::pivot_longer(cols = -gt, names_to = "kNN", values_to = "AUC")
+auc_df = read.table(paste0(path,tissue_name,"_sensitivity_auroc.csv"),header = TRUE)
+auc_df <- auc_df %>% tidyr::pivot_longer(cols = -gt, names_to = "kNN", values_to = "AUC") %>% filter(gt %in% c("Top100","CellMarkerDB"))
+auc_df$gt = factor(auc_df$gt); levels(auc_df$gt) = c("CellMarkerDB","MacFC(Top100)")
 auc_df$kNN = as.numeric(gsub("kNN","",auc_df$kNN))
-ggplot(data = auc_df, aes(x = kNN, y = AUC, colour = factor(gt,levels = unique(gt)), group = gt)) +
+fig = ggplot(data = auc_df, aes(x = kNN, y = AUC), group = gt) +
   geom_line() +
-  geom_point() +
-  xlab("kNN") +
-  ylab("AUC") +
+  geom_point() + labs(x = "kNN", y = "AUROC") + facet_wrap(~gt, scales = "free") + 
   theme_minimal()
-
+pdf(width = 6,height = 3)
+fig
+dev.off()
 ```
 
 # Fig - Module HeatMap

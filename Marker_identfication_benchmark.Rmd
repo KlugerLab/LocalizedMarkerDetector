@@ -17,8 +17,9 @@ library("dplyr")
 # Load Data & Process
 ## Load Data
 ```{r}
-path <- "/data/ruiqi/local_marker/dataset/tabular_muris"
-tiss <- readRDS(paste0(path,"/marrow_facs.rds"))
+path <- "/data/ruiqi/local_marker/dataset/tabular_muris/"
+tissue_name = "marrow_facs" #lung_facs, pancreas_facs
+tiss <- readRDS(paste0(path,tissue_name,".rds"))
 ```
 ## Process
 ```{r}
@@ -42,7 +43,7 @@ total_count = tiss@meta.data$nCount_RNA
 For each gene, sorting cell types by mean expression for each gene and computing fold changes between consecutive types, take the maximum value among the N-1 fold change values, given N cell types.
 ```{r}
 path = "./benchmark_result/"
-tissue_name = "marrow_facs"
+# tissue_name = "marrow_facs"
 ```
 
 ```{r}
@@ -85,8 +86,7 @@ write.table(celldb_marker,file = paste0(path,tissue_name,"_ground_truth_c2.txt")
 # Run Each Method and save results
 ```{r}
 path = "./benchmark_result/"
-tissue_name = "marrow_facs"
-tissue_name = "lung_facs"
+# tissue_name = "marrow_facs"
 ```
 
 ## LocalMarkerDetector
@@ -94,7 +94,7 @@ Genes were ranked by the increasing order of Cumulative Diffusion-KL score
 ```{r}
 method = "lmd"
 source("./LMD_function.R", echo = F)
-res = LMD(dat,feature_space,max_time = 2^10)
+res = LMD(dat,feature_space,max_time = 2^10,knn = 7)
 marker = show_result_lmd(res, n = length(selected_genes))
 marker[order(marker$score),'rank'] = 1:nrow(marker)
 write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = TRUE)
@@ -286,7 +286,7 @@ write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.nam
 # Integrate rank from all methods into one dataframe
 ```{r}
 path = "./benchmark_result/"
-tissue_name = "marrow_facs"
+# tissue_name = "marrow_facs"
 ```
 ```{r}
 method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg")
@@ -310,7 +310,7 @@ write.table(df_benchmark,file = paste0(path,tissue_name,"_benchmark_rank_table.c
 # AUROC
 ```{r}
 path = "./benchmark_result/"
-tissue_name = "marrow_facs"
+# tissue_name = "marrow_facs"
 df_benchmark = read.table(paste0(path,tissue_name,"_benchmark_rank_table.csv"))
 ```
 ```{r}
@@ -344,7 +344,7 @@ write.table(df,file = paste0(path,tissue_name,"_auroc.csv"),row.names = FALSE)
 # Density Index
 ```{r}
 path = "./benchmark_result/"
-tissue_name = "marrow_facs"
+# tissue_name = "marrow_facs"
 ```
 ```{r}
 df_benchmark = read.table(paste0(path,tissue_name,"_benchmark_rank_table.csv"))
@@ -386,10 +386,11 @@ write.table(score_measure,file = paste0(path,tissue_name,"_density_index.csv"),r
 # Sensitivity Test (Try different K)
 ```{r}
 path = "./marrow_result/"
-tissue_name = "marrow_facs"
+# tissue_name = "marrow_facs"
 ```
 ```{r}
 # RunLMD under differen K
+source("./LMD_function.R", echo = F)
 score_df = do.call(cbind,lapply(c(3:10,20,30,40,50),function(kNN){
   try({
     res = LMD(dat,feature_space,knn = kNN)
@@ -402,7 +403,7 @@ write.table(score_df,file = paste0(path,tissue_name,"_different_knn.csv"),row.na
 ```{r}
 # Obtain AUROC
 score_ranked <- data.frame(score_df) %>% mutate(across(everything(), rank))
-
+path = "./benchmark_result/"
 max_logfc = read.table(paste0(path,tissue_name,"_ground_truth_c1.txt")) %>% rownames()
 celldb_marker = read.table(paste0(path,tissue_name,"_ground_truth_c2.txt"))[,1]
 
@@ -410,11 +411,12 @@ gt_list = c(lapply(seq(50,1000,50),function(x) max_logfc[1:x]),list(celldb_marke
 names(gt_list) = c(paste0("Top",seq(50,1000,50)),"CellMarkerDB")
 
 auc_df = apply(score_ranked,2,function(x){
-  unlist(lapply(gt_genes_list,function(genes){
+  unlist(lapply(gt_list,function(genes){
     roc = pROC::roc(as.integer(rownames(score_ranked) %in% genes), x, direction = ">")
     pROC::auc(roc)
   }))
 })
+path = "./marrow_result/"
 auc_df = data.frame(auc_df,gt = names(gt_list))
 write.table(auc_df,file = paste0(path,tissue_name,"_sensitivity_auroc.csv"),row.names = FALSE)
 ```
