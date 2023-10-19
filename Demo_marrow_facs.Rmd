@@ -36,8 +36,8 @@ library("SeuratWrappers")
 ```{r}
 if (!file.exists('facs_Marrow_seurat_tiss.Robj')) {
    # If load url doesn't work, please download it and load from your working directory
-  options(timeout=6000) 
-  download.file("https://figshare.com/ndownloader/files/13092380", 
+  options(timeout=6000)
+  download.file("https://figshare.com/ndownloader/files/13092380",
                 destfile = 'facs_Marrow_seurat_tiss.Robj', method = 'libcurl')
  }
 load('facs_Marrow_seurat_tiss.Robj')
@@ -182,7 +182,7 @@ as.ggplot(p)
 
 ```{r}
 knn = 10; major_vote = 5
-A = Symmetric_KNN_graph(knn = knn, feature_space = feature_space)[[2]]
+A = Symmetric_KNN_graph(knn = knn, feature_space = feature_space)$'adj_matrix'
 cell_block_loop = lapply(1:100,function(loop){
   GMM_subsampling(seed = loop, gene_partition, expr_dat = dat, cell_kNN_graph = A, major_vote)
 })
@@ -198,6 +198,7 @@ pl = lapply(levels(gene_partition),function(module){
 })
 plot_grid(plotlist = pl,ncol = 10) # may takes long time to plot
 ```
+
 
 ## Step3: Identify Celltype-specific activated Modules
 
@@ -215,12 +216,14 @@ jaccard_index <- apply(cell_block, 2, function(module_col) {
     1 - philentropy::distance(rbind(module_col,one_hot_col), method = "jaccard", mute.message=TRUE)
   })
 })
+jaccard_index = jaccard_index[rev(ordered_cell_types),]
+rm(ordered_cell_types)
 ```
 
 ### Visualize Heatmap of Jaccard Index Matrix
 
 ```{r}
-pheatmap(jaccard_index[rev(ordered_cell_types),], 
+pheatmap(jaccard_index,
          cluster_rows=FALSE, cluster_cols=FALSE, 
          scale = "none", 
          color = colorRampPalette(rev(c("firebrick3", "white")))(99))
@@ -261,6 +264,11 @@ pl <- lapply(rownames(jaccard_index)[rev(order(apply(jaccard_index,1,max)))], fu
 
 ```{r}
 module_celltype = apply(jaccard_index,2,function(x){paste(names(which(x > 0.4)),collapse = ",")})
+```
+
+## Save Intermediate data
+```{r}
+save(gene_partition,dist,gene_hree,cell_block,jaccard_index,file = "./marrow_result/module_result.rdata")
 ```
 
 ## Step4: Module Enrichment Analysis
@@ -336,3 +344,8 @@ df_module[top_pathway_clusters,"Pathway_description"] = unlist(lapply(top_enrich
 df_module[is.na(df_module)] = ""
 write.csv(df_module,file = "module_description.csv",row.names = FALSE)
 ```
+
+
+
+
+

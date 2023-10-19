@@ -137,7 +137,7 @@ Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust = FALSE){
     print(paste0("Final kNN: ",knn))
   }
   if (length(filtered_components) >= 2) {
-    warning("Disconnected Components, Please increase knn.")
+    stop("Disconnected Components, Please increase knn.")
   }
   
   filtered_node_names <- unlist(lapply(filtered_components, function(comp) names(comp)))
@@ -231,9 +231,9 @@ show_result_lmd <- function(res.lmd, n = 10){
 }
 LMD <- function(expression, feature_space, knn = 5, max_time = 2^10){
   if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
-  W = Symmetric_KNN_graph(knn = 5, feature_space = feature_space)[[1]]
+  W = Symmetric_KNN_graph(knn = knn, feature_space = feature_space)$'graph'
   rho = Rowwise_normalize(expression)
-  res = fast_calculate_multi_score(W = W, init_state = rho)
+  res = fast_calculate_multi_score(W = W, init_state = rho, max_time = max_time)
   return(res)
 }
 
@@ -267,11 +267,21 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
     init_state = t(init_state)
   }
   if(ncol(init_state)!=graph_node_number | nrow(init_state)!=1){stop("Unmatched dimension")}
-  check_step = log(check_time,base = 2)
+  check_step = sort(unique(floor(log(check_time,base = 2))))
+  check_step = check_step[check_step >= 1]
+  include_init = FALSE
+  if(0 %in% check_time){
+    include_init = TRUE
+  }
+  check_time = 2^check_step
   if(is.null(P_ls)){P_ls = Obtain_Pls(W,max(check_time))}
   multi_state = sapply(P_ls[check_step],function(P){
     state = fastMatMult(init_state, P)
   })
+  if(include_init){
+    multi_state = cbind(t(init_state),multi_state)
+    check_time = c(0,check_time)
+  }
   colnames(multi_state) = check_time
   pl = lapply(seq(ncol(multi_state)),function(i){
     FeaturePlot_custom(multi_state[,i],coord,value_name = "Density",title_name = paste0("T = ",colnames(multi_state)[i]))
@@ -291,7 +301,7 @@ FeaturePlot_meta <- function(dat, coord, feature_partition){
     p1 <- ggplot(df[order(df$value),], aes(x=!!as.name(colnames(df)[1]), y=!!as.name(colnames(df)[2]), color=value)) + 
       geom_point(size = 0.2) + 
       scale_color_gradient(low = "lightgrey", high = "blue") + 
-      ggtitle(plot.title1) +  
+      ggtitle(plot.title1) + labs(color = "Expression") +
       theme(legend.title = element_text(size = 8),
             panel.grid = element_blank(),
             panel.background = element_blank()) 
@@ -300,7 +310,7 @@ FeaturePlot_meta <- function(dat, coord, feature_partition){
   names(pl) = levels(feature_partition)
   return(pl)
 }
-Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, facet_class = NULL){
+Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, facet_class = NULL, add_point = NULL){
   score_df = res.lmd$diffusion_KL_score
   score_df["score0_0"] = 0
   if(!all(genes %in% rownames(score_df))){stop("Genes not found!")}
@@ -337,6 +347,9 @@ Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, f
           ) + 
     geom_text(data = df %>% group_by(gene) %>% slice_head(n = 4) %>% slice_tail(n = 1),
               aes(label = gene), hjust = 0) + theme_minimal_grid()
+  if(!is.null(add_point)){
+    p = p + geom_point(data = df %>% filter(step %in% add_point), aes(x = step, y = score, color = label), size = 2)
+  }
   if(!is.null(facet_class)){
     p = p + facet_wrap(~facet,scales = "free")
   }
