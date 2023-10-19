@@ -75,7 +75,7 @@ source("./LMD_function.R", echo = F)
 
 ## Step1: Build KNN Graph
 
-```{r}
+```{r, fig.width=20}
 # Construct knn graph
 knn_result = Symmetric_KNN_graph(knn = 5, feature_space = feature_space)
 
@@ -170,7 +170,7 @@ p = pheatmap(as.matrix(dist),
               ann_colors = list(Module = setNames(colorRampPalette(brewer.pal(12, "Paired"))(nlevels(gene_partition)),levels(gene_partition))),
               treeheight_row = 0,
               col=colorRampPalette(c("firebrick3", "white"))(99),
-              show_colnames = FALSE, 
+              show_colnames = FALSE,
               show_rownames = FALSE,
               main = paste(distance_method,
                            clustering_method,sep = "-"),
@@ -192,11 +192,11 @@ cell_block = cell_block_prop
 
 ### Visualize Module on Cell embeddings
 
-```{r, fig.width=40}
+```{r, fig.width=20, fig.asp=1}
 pl = lapply(levels(gene_partition),function(module){
   FeaturePlot_custom(value = cell_block[,module], coord = visual_space, value_name = "Module Score",title_name = sprintf("Module %s (%d genes)",module, sum(gene_partition == module)))
 })
-plot_grid(plotlist = pl,ncol = 10) # may takes long time to plot
+plot_grid(plotlist = pl,ncol = 5) # may takes long time to plot
 ```
 
 
@@ -344,8 +344,3 @@ df_module[top_pathway_clusters,"Pathway_description"] = unlist(lapply(top_enrich
 df_module[is.na(df_module)] = ""
 write.csv(df_module,file = "module_description.csv",row.names = FALSE)
 ```
-
-
-
-
-
