@@ -169,7 +169,7 @@ p = pheatmap(as.matrix(dist),
               cluster_cols = gene_hree,
               ann_colors = list(Module = setNames(colorRampPalette(brewer.pal(12, "Paired"))(nlevels(gene_partition)),levels(gene_partition))),
               treeheight_row = 0,
-              col=colorRampPalette(c("red","blue4"))(99),
+              col=colorRampPalette(c("firebrick3", "white"))(99),
               show_colnames = FALSE, 
               show_rownames = FALSE,
               main = paste(distance_method,
@@ -223,7 +223,7 @@ jaccard_index <- apply(cell_block, 2, function(module_col) {
 pheatmap(jaccard_index[rev(ordered_cell_types),], 
          cluster_rows=FALSE, cluster_cols=FALSE, 
          scale = "none", 
-         color = colorRampPalette(rev(c("firebrick3", "white", "navy")))(100))
+         color = colorRampPalette(rev(c("firebrick3", "white")))(99))
 ```
 
 ### Visualize How CellType-Module is Matched on Cell Embeddings
