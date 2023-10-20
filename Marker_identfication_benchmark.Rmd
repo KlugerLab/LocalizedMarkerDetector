@@ -106,7 +106,7 @@ Genes were ranked by their lowest adjusted P-value in any cluster (increasing or
 tiss <- FindNeighbors(tiss, dims = 1:n_dim)
 tiss <- FindClusters(tiss, resolution = 1.5, algorithm = 3)
 method = "wilcox_no_filter"
-marker <- FindAllMarkers(tiss, features = rownames(dat), only.pos = FALSE, test.use = "wilcox", logfc.threshold = 0, min.pct = 0)
+marker <- FindAllMarkers(tiss, features = selected_genes, only.pos = FALSE, test.use = "wilcox", logfc.threshold = 0, min.pct = 0)
 gene_rank = marker %>% arrange(.,p_val_adj,desc(avg_log2FC)) %>% distinct(.,gene, .keep_all = TRUE) %>% select(gene)
 gene_rank$'rank' = 1:nrow(gene_rank)
 marker <- merge(marker,gene_rank,by = "gene")
@@ -119,7 +119,7 @@ tiss <- FindNeighbors(tiss, dims = 1:n_dim)
 tiss <- FindClusters(tiss, resolution = 1.5, algorithm = 3)
 
 method = "wilcox_default"
-marker <- FindAllMarkers(tiss, features = rownames(dat), only.pos = FALSE, test.use = "wilcox", logfc.threshold = 0.25,min.pct = 0.1)
+marker <- FindAllMarkers(tiss, features = selected_genes, only.pos = FALSE, test.use = "wilcox", logfc.threshold = 0.25,min.pct = 0.1)
 
 gene_rank = marker %>% arrange(.,p_val_adj,desc(avg_log2FC)) %>% distinct(.,gene, .keep_all = TRUE) %>% select(gene)
 gene_rank$'rank' = 1:nrow(gene_rank)
@@ -266,7 +266,7 @@ result = MarcoPolo.find_markers(adata=adata, regression_result=regression_result
 ```{r}
 method = "marcopolo"
 marker = reticulate::py$result
-marker$'rank' = marker$MarcoPolo_rank
+marker$'rank' = marker$MarcoPolo_rank + 1
 write.table(marker,file = sprintf("%s%s_%s.csv",path,method,tissue_name),row.names = TRUE)
 ```
 

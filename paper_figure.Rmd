@@ -70,7 +70,7 @@ df_benchmark = read.table(paste0(path,tissue_name,"_benchmark_rank_table.csv"))
 method_ls = colnames(df_benchmark)
 method_fullname = setNames(c("LMD","singleCellHaystack","Hotspot","Marcopolo","SEMITONES","Seurat v3 default", "Seurat v3 Wilcoxon unfiltered","HighlyVariableGenes"),method_ls)
 coldef = setNames(
-  colorRampPalette(brewer.pal(7, "Set1"))(length(method_fullname)),
+  colorRampPalette(brewer.pal(9, "Set1"))(length(method_fullname)),
   method_fullname)
 ```
 ```{r}
@@ -87,58 +87,58 @@ fig <- ggplot(df_auc, aes(x = gt_set, y = AUROC, fill = Method)) +
   theme_minimal() +
   labs(x = "Ground-Truth Genesets", y = "AUROC", fill = "Method") + coord_cartesian(ylim = c(0.5, 1)) +
   theme(legend.position = "bottom")  +  scale_fill_manual(values= coldef[names(coldef)%in%df_auc$Method])
-fig + ggtitle("Lung")
+fig + ggtitle(tissue_name)
 ```
 
-# Fig - Enrichment Overlap of Prioritized Genes with CellMarker Database Confidence Markers
-```{r}
-path = "./benchmark_result/"
-tissue_name = "marrow_facs"
+<!-- # Fig - Enrichment Overlap of Prioritized Genes with CellMarker Database Confidence Markers -->
+<!-- ```{r} -->
+<!-- path = "./benchmark_result/" -->
+<!-- tissue_name = "marrow_facs" -->
 
-library(Seurat)
-cell_marker_db = readxl::read_xlsx("/data/ruiqi/local_marker/dataset/Cell_Marker/Cell_marker_All.xlsx") %>% filter(species == "Mouse") %>% 
-  filter(tissue_class == "Bone marrow") %>% filter(!is.na(cellontology_id)) %>% 
-  filter(!is.na(PMID)) %>% mutate(gene_name1 = marker) %>% mutate(gene_name2 = Symbol) %>% select(c("gene_name1","gene_name2"))
+<!-- library(Seurat) -->
+<!-- cell_marker_db = readxl::read_xlsx("/data/ruiqi/local_marker/dataset/Cell_Marker/Cell_marker_All.xlsx") %>% filter(species == "Mouse") %>%  -->
+<!--   filter(tissue_class == "Bone marrow") %>% filter(!is.na(cellontology_id)) %>%  -->
+<!--   filter(!is.na(PMID)) %>% mutate(gene_name1 = marker) %>% mutate(gene_name2 = Symbol) %>% select(c("gene_name1","gene_name2")) -->
 
-df_benchmark = read.table(paste0(path,tissue_name,"_benchmark_rank_table.csv"))
+<!-- df_benchmark = read.table(paste0(path,tissue_name,"_benchmark_rank_table.csv")) -->
 
-method = "lmd"
-gene_bin = data.frame(gene = rownames(df_benchmark)[order(df_benchmark[,method])][1:1000])
-gene_bin$freq = unlist(lapply(gene_bin$gene,function(i){
-  id = which(grepl(paste0("^", i, "$"), cell_marker_db$gene_name1, ignore.case = TRUE) + grepl(paste0("^", i, "$"), cell_marker_db$gene_name2, ignore.case = TRUE) >=1)
-  return(length(id))
-}) )
-gene_bin$'freq_class' = cut(gene_bin$freq, breaks = c(-Inf,1,3,Inf), labels = c("none", "low", "high"), right = FALSE)
+<!-- method = "lmd" -->
+<!-- gene_bin = data.frame(gene = rownames(df_benchmark)[order(df_benchmark[,method])][1:1000]) -->
+<!-- gene_bin$freq = unlist(lapply(gene_bin$gene,function(i){ -->
+<!--   id = which(grepl(paste0("^", i, "$"), cell_marker_db$gene_name1, ignore.case = TRUE) + grepl(paste0("^", i, "$"), cell_marker_db$gene_name2, ignore.case = TRUE) >=1) -->
+<!--   return(length(id)) -->
+<!-- }) ) -->
+<!-- gene_bin$'freq_class' = cut(gene_bin$freq, breaks = c(-Inf,1,3,Inf), labels = c("none", "low", "high"), right = FALSE) -->
 
-gene_bin$bin <- cut(seq(1:nrow(gene_bin)), breaks = 40, labels = FALSE)
-gene_bin$'bin_label' = paste0(nrow(gene_bin)/max(gene_bin$bin)*(gene_bin$bin-1)+1,"-",nrow(gene_bin)/max(gene_bin$bin)*(gene_bin$bin))
-gene_bin$'bin_label' = factor(gene_bin$'bin_label',levels = unique(gene_bin$'bin_label'))
+<!-- gene_bin$bin <- cut(seq(1:nrow(gene_bin)), breaks = 40, labels = FALSE) -->
+<!-- gene_bin$'bin_label' = paste0(nrow(gene_bin)/max(gene_bin$bin)*(gene_bin$bin-1)+1,"-",nrow(gene_bin)/max(gene_bin$bin)*(gene_bin$bin)) -->
+<!-- gene_bin$'bin_label' = factor(gene_bin$'bin_label',levels = unique(gene_bin$'bin_label')) -->
 
-gene_freq_prop <- gene_bin %>%
-  group_by(bin_label, freq_class) %>%
-  summarise(n = n()) %>%
-  mutate(freq = n / sum(n))
-gene_freq_prop$freq_class = factor(gene_freq_prop$freq_class,levels = c("none","low","high"),labels = c("None(=0)","Low(1,2)","High(>=3)"))
+<!-- gene_freq_prop <- gene_bin %>% -->
+<!--   group_by(bin_label, freq_class) %>% -->
+<!--   summarise(n = n()) %>% -->
+<!--   mutate(freq = n / sum(n)) -->
+<!-- gene_freq_prop$freq_class = factor(gene_freq_prop$freq_class,levels = c("none","low","high"),labels = c("None(=0)","Low(1,2)","High(>=3)")) -->
 
-coldef = setNames(c("gray71","firebrick1","firebrick4"),levels(gene_freq_prop$freq_class))
+<!-- coldef = setNames(c("gray71","firebrick1","firebrick4"),levels(gene_freq_prop$freq_class)) -->
 
-fig = ggplot(gene_freq_prop, aes(fill=freq_class, y=freq, x=bin_label)) +
-  geom_bar(position="fill", stat="identity") +
-  ylab("Frequency") +
-  xlab("Gene Rank") +
-  labs(fill = "Confidence") +
-  scale_fill_manual(values= coldef) +
-  theme_minimal() + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+<!-- fig = ggplot(gene_freq_prop, aes(fill=freq_class, y=freq, x=bin_label)) + -->
+<!--   geom_bar(position="fill", stat="identity") + -->
+<!--   ylab("Frequency") + -->
+<!--   xlab("Gene Rank") + -->
+<!--   labs(fill = "Confidence") + -->
+<!--   scale_fill_manual(values= coldef) + -->
+<!--   theme_minimal() +  -->
+<!--   theme(axis.text.x = element_text(angle = 45, hjust = 1)) -->
 
-fig
-```
-```{r}
-genes = c("Ctla2a","Fpr2","Mmp8")
-pl = lapply(genes,function(g) FeaturePlot(tiss, g, order = TRUE) + labs(color = "Expression") + ggtitle(sprintf("%s (rank %d)",g,which(gene_bin == g))))
-fig = cowplot::plot_grid(plotlist = pl, ncol = 3)
-fig
-```
+<!-- fig -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- genes = c("Ctla2a","Fpr2","Mmp8") -->
+<!-- pl = lapply(genes,function(g) FeaturePlot(tiss, g, order = TRUE) + labs(color = "Expression") + ggtitle(sprintf("%s (rank %d)",g,which(gene_bin == g)))) -->
+<!-- fig = cowplot::plot_grid(plotlist = pl, ncol = 3) -->
+<!-- fig -->
+<!-- ``` -->
 
 # Fig - Gene Ranking Variations between LMD and Other Methods
 ```{r}
@@ -146,28 +146,8 @@ path = "./benchmark_result/"
 tissue_name = "marrow_facs"
 
 df_benchmark = read.table(paste0(path,tissue_name,"_benchmark_rank_table.csv"))
-
 method_vs = "lmd"
-method_vs_set = c("hotspot","haystack","wilcox_default")
-pl = lapply(method_vs_set,function(method){
-  p = ggplot(df_benchmark, aes(x=!!as.name(method), y=!!as.name(method_vs))) + geom_point(size = 1,col = "blue") +
-    geom_abline(intercept = 0, slope = 1, col = "grey", linetype = "dashed") + scale_x_log10(breaks = 10^(0:4), labels = expression(10^0, 10^1, 10^2, 10^3, 10^4)) +
-    scale_y_log10(breaks = 10^(0:4), labels = expression(10^0, 10^1, 10^2, 10^3, 10^4)) +
-    expand_limits(x = c(1, 10^4), y = c(1, 10^4)) +
-    labs(x = paste0(method_fullname[method]," Rank"), y = paste0(method_fullname[method_vs]," Rank")) + theme_minimal() 
-  
-  # annotate gene labels
-  library(ggrepel)
-  df_label = data.frame(df_benchmark[,c(method,method_vs)],label = rownames(df_benchmark))
-  sub = c(which(df_label[,method] <= 100 & df_label[,method_vs] > 500),
-          which(df_label[,method] > 500 & df_label[,method_vs] <= 100) )
-  df_label = df_label[sub,]
-  df_label = df_label[order(df_label[,1]),]
-  p = p + geom_text_repel(data = df_label, aes(label=label),col = "red",arrow = arrow(type = "closed", length = unit(0.01, "inches")),max.overlaps = 200)
-  p
-})
-fig = cowplot::plot_grid(plotlist = pl, ncol = length(method_vs_set))
-fig
+method_vs_set = c("wilcox_default","hotspot","marcopolo","semi","haystack")
 ```
 ```{r}
 sub = do.call(c,lapply(method_vs_set,function(method){
@@ -175,18 +155,39 @@ sub = do.call(c,lapply(method_vs_set,function(method){
           which(df_benchmark[,method] > 500 & df_benchmark[,method_vs] <= 100) )
   sub
 }))
-df_label_all = df_benchmark[unique(sub),c(method_vs_set,method_vs)]
+df_label_all = df_benchmark[unique(sub),c(method_vs,method_vs_set)]
 df_label_all$'legend' = sapply(seq(nrow(df_label_all)),function(i){
-  paste(paste(method_fullname[colnames(df_label_all)[c(4,1:3)]],df_label_all[i,c(4,1:3)],sep = ":"),collapse = "\n")
-}) 
-
-g = c("Mogat2","Vpreb2","Cd19","Mup3","Fyb","Naaa")
+  paste(paste(method_fullname[colnames(df_label_all)],df_label_all[i,],sep = ":"),collapse = "\n")
+})
+g = c("Mogat2","Vpreb2","Cd19","Abca13","Il2rb","Mup3","Fyb","Naaa","Zf12","Phgdh")
 pl = lapply(g,function(x){
   FeaturePlot(tiss,features = x,order =TRUE) + annotation_custom(grob = grid::textGrob(df_label_all[x,"legend"], x = 1, y = 1, just = c("right", "top"),gp = grid::gpar(col = "red", fontsize = 10)))
 })
-fig = cowplot::plot_grid(plotlist = pl,ncol = 3)
+fig = cowplot::plot_grid(plotlist = pl,ncol = length(method_vs_set))
 fig
 ```
+```{r}
+pl_rank = lapply(method_vs_set,function(method){
+  df_label = data.frame(df_benchmark[,c(method,method_vs)],label = rownames(df_benchmark))
+  df_label[c(which(df_label[,method] <= 100 & df_label[,method_vs] > 500)),"color"] = sprintf("Favor by %s (rank <= 100)",method)
+  df_label[c(which(df_label[,method] > 500 & df_label[,method_vs] <= 100) ),"color"] = sprintf("Favor by %s (rank <= 100)",method_vs)
+  df_label$'color' = as.factor(df_label$'color')
+  p = ggplot(df_label, aes(x=!!as.name(method), y=!!as.name(method_vs),color = color)) + geom_point(size = 1) + 
+  scale_color_manual(values = c("red", "blue", "grey50"),
+                     breaks = levels(df_label$'color')) + 
+    geom_abline(intercept = 0, slope = 1, col = "grey", linetype = "dashed") + scale_x_log10(breaks = 10^(0:4), labels = expression(10^0, 10^1, 10^2, 10^3, 10^4)) +
+    scale_y_log10(breaks = 10^(0:4), labels = expression(10^0, 10^1, 10^2, 10^3, 10^4)) +
+    expand_limits(x = c(1, 10^4), y = c(1, 10^4)) +
+    labs(x = paste0(method_fullname[method]," Rank"), y = paste0(method_fullname[method_vs]," Rank"), color = "Highlighted Genes") + theme_minimal() 
+  # annotate gene labels
+  # library(ggrepel)
+  p = p + geom_text(data = df_label %>% filter(!is.na(color)) %>% filter(label %in% g), aes(label=label))
+  p
+})
+fig = cowplot::plot_grid(plotlist = pl_rank, ncol = length(method_vs_set))
+fig
+```
+
 
 # Fig - Gene Co-localization Module Benchmark
 ```{r}
@@ -338,6 +339,9 @@ dev.off()
 # Fig - Module HeatMap
 ```{r}
 load("./marrow_result/module_result.rdata")
+source("./LMD_function.R", echo = F)
+library(RColorBrewer)
+library(dplyr)
 module_color = setNames(colorRampPalette(brewer.pal(12, "Paired"))(nlevels(gene_partition)),levels(gene_partition))
 celltype_color = setNames(colorRampPalette(brewer.pal(9, "Set1"))(length(unique(cell_label))),unique(cell_label))
 
@@ -366,12 +370,30 @@ pheatmap(jaccard_index,
 ```
 ```{r}
 # Bipartite Plot
+jaccard_thred = 0.4
+
+library(igraph)
+library("grid") 
+library("gridExtra") 
+
 df_edge <- as.data.frame(as.table(jaccard_index))
 colnames(df_edge) = c("from","to","weight")
-df_edge <- subset(df_edge, weight > 0.4)
+df_edge <- subset(df_edge, weight > jaccard_thred)
 df_edge$width = ifelse(df_edge$weight > 0.8,2,0.5)
 df_node = data.frame(name=c(names(module_color),names(celltype_color)),color = c(module_color,celltype_color))
 df_node$type = ifelse(df_node$name %in% names(module_color),TRUE,FALSE)
+
+# Define specific color for module
+rownames(df_node) = df_node$name
+ct_module = names(which(apply(jaccard_index,2,max) > jaccard_thred))
+ct_subtype_module = c(4,5,6,30,39,42,43)
+ct_multype_module = c(2,13,19,33,36,54)
+cc_module = c(16,17,18,31)
+df_node[names(module_color),"color"] = "grey"
+df_node[ct_module,"color"] = "red"
+df_node[ct_multype_module,"color"] = "purple"
+df_node[ct_subtype_module,"color"] = "yellow"
+df_node[cc_module,"color"] = "green"
 
 g <- graph_from_data_frame(df_edge, directed=FALSE, vertices=df_node)
 V(g)$shape <- ifelse(V(g)$type, "circle", "square")
@@ -382,10 +404,18 @@ plot(g, layout=l, vertex.size=2, vertex.label=ifelse(V(g)$type, V(g)$name, NA), 
      vertex.label.cex=0.5,
      vertex.label.dist=-1,
      vertex.label.degree=pi/2)
-coords = as.data.frame(l) %>% filter(V2 == 0) %>% mutate(labels = names(celltype_color))
-text(x = coords$V1, y = coords$V2, labels = coords$labels, srt = 90, adj = c(1.5, 0.5),cex = 0.5,col = "black")
-# Add legend for colors
-legend("bottom", legend=names(celltype_color), fill=celltype_color, bty="n", cex=0.5)
+
+# Create Node Legend & Edge Legend
+color_label = c("green" = "cell cycle",purple = "multi cell type",red = "cell type",yellow = "cell subtype")
+df_node$subtype = color_label[df_node$color]
+
+p <- ggplot(df_node %>% filter(type), aes(x = 0, y = 0,color = subtype)) + geom_point(size = 7) + scale_color_manual(values= setNames(names(color_label),color_label)) + theme_minimal() + labs(color = "Module Type") + theme(legend.direction="horizontal")
+grid.newpage()
+grid.draw(get_legend(p))
+
+p <- ggplot(df_node %>% filter(!type), aes(x = 0, y = 0,color = name)) + geom_point(size = 7,shape = 15) + scale_color_manual(values= df_node %>% filter(!type) %>% pull(color,name)) + theme_minimal() + labs(color = "Cell Type") + theme(legend.direction="horizontal")
+grid.newpage()
+grid.draw(get_legend(p))
 ```
 # Fig - Module TSNE
 ```{r}

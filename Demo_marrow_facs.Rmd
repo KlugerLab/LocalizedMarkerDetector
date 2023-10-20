@@ -339,8 +339,29 @@ top_enrich_pathway <- lapply(top_pathway_clusters, function(i) epathway_result[[
 df_module = data.frame(Module = levels(gene_partition))
 df_module[,"Gene"] = unlist(lapply(levels(gene_partition),function(x){paste(names(gene_partition)[gene_partition == x],collapse = ",")}))
 df_module[,"celltype"] = module_celltype[levels(gene_partition)]
-df_module[top_go_clusters,"GO_description"] = unlist(lapply(top_enrich_go,function(x) paste(x[['Description']],collapse = ",")))
-df_module[top_pathway_clusters,"Pathway_description"] = unlist(lapply(top_enrich_pathway,function(x) paste(x[['Description']],collapse = ",")))
+df_module[top_go_clusters,"GO_description"] = unlist(lapply(top_enrich_go,function(x){
+  des = x[["Description"]]
+  paste(des[!is.na(des)],collapse = ",")
+}
+))
+df_module[top_pathway_clusters,"Pathway_description"] = unlist(lapply(top_enrich_pathway,function(x){
+  des = x[["Description"]]
+  paste(des[!is.na(des)],collapse = ",")
+}))
 df_module[is.na(df_module)] = ""
-write.csv(df_module,file = "module_description.csv",row.names = FALSE)
+write.csv(df_module,file = "./marrow_result/module_description.csv",row.names = FALSE)
+```
+
+## Cell Cycle Modules
+```{r}
+library(gprofiler2)
+mmus_s = gorth(cc.genes.updated.2019$s.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
+mmus_g2m = gorth(cc.genes.updated.2019$g2m.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
+tiss = CellCycleScoring(tiss, s.features = mmus_s, 
+                        g2m.features = mmus_g2m, set.ident = FALSE)
+DimPlot(tiss,group.by = "Phase")
+
+pdf(width = 30, height = 5)
+pl
+dev.off()
 ```
