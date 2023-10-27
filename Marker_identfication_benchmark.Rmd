@@ -43,7 +43,7 @@ total_count = tiss@meta.data$nCount_RNA
 For each gene, sorting cell types by mean expression for each gene and computing fold changes between consecutive types, take the maximum value among the N-1 fold change values, given N cell types.
 ```{r}
 path = "./benchmark_result/"
-# tissue_name = "marrow_facs"
+tissue_name = "marrow_facs"
 ```
 
 ```{r}
@@ -67,10 +67,10 @@ write.table(max_logfc,file = paste0(path,tissue_name,"_ground_truth_c1.txt"))
 ```
 ## Criterion2: CellMarkerDB
 Downloaded marker from http://bio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_download_files/file/Cell_marker_Seq.xlsx
-PanglaoDB: https://panglaodb.se/markers/PanglaoDB_markers_27_Mar_2020.tsv.gz and exclude genes that reported only once
+<!-- PanglaoDB: https://panglaodb.se/markers/PanglaoDB_markers_27_Mar_2020.tsv.gz and exclude genes that reported only once -->
 ```{r}
 # Load CellMarkerDB
-cell_marker_db = readxl::read_xlsx("/data/ruiqi/local_marker/dataset/Cell_Marker/Cell_marker_All.xlsx") %>% filter(species == "Mouse") %>% filter(tissue_class == "Bone marrow") %>% filter(!is.na(cellontology_id)) %>% filter(!is.na(PMID)) %>% mutate(gene_name1 = marker) %>% mutate(gene_name2 = Symbol) %>% select(c("gene_name1","gene_name2")) %>% group_by(across(everything())) %>% dplyr::summarise(count = n(), .groups = "drop") %>% filter(count > 1)
+cell_marker_db = readxl::read_xlsx("/data/ruiqi/local_marker/dataset/Cell_Marker/Cell_marker_All.xlsx") %>% filter(species == "Mouse") %>% filter(tissue_class == "Bone marrow") %>% filter(!is.na(cellontology_id)) %>% filter(!is.na(PMID)) %>% mutate(gene_name1 = marker) %>% mutate(gene_name2 = Symbol) %>% select(c("gene_name1","gene_name2")) %>% group_by(across(everything())) %>% dplyr::summarise(count = n(), .groups = "drop") %>% filter(count >= 1) # Lung, Pancreas
 
 # Match gene name
 celldb_marker = union(cell_marker_db$gene_name1,cell_marker_db$gene_name2)
@@ -312,13 +312,17 @@ write.table(df_benchmark,file = paste0(path,tissue_name,"_benchmark_rank_table.c
 path = "./benchmark_result/"
 # tissue_name = "marrow_facs"
 df_benchmark = read.table(paste0(path,tissue_name,"_benchmark_rank_table.csv"))
+
+method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg")
+method_fullname = setNames(c("LMD","singleCellHaystack","Hotspot","Marcopolo","SEMITONES","Seurat v3 default", "Seurat v3 Wilcoxon unfiltered","HighlyVariableGenes"),method_ls)
 ```
 ```{r}
 max_logfc = read.table(paste0(path,tissue_name,"_ground_truth_c1.txt")) %>% rownames()
 celldb_marker = read.table(paste0(path,tissue_name,"_ground_truth_c2.txt"))[,1]
-
 gt_list = c(lapply(seq(50,1000,50),function(x) max_logfc[1:x]),list(celldb_marker))
 names(gt_list) = c(paste0("Top",seq(50,1000,50)),"CellMarkerDB")
+
+# AUC table
 df = do.call(rbind,lapply(1:length(gt_list),function(i){
   true_marker = gt_list[[i]]
   df_benchmark$"gt" = 0
@@ -339,6 +343,25 @@ levels(df$Method) = method_fullname[levels(df$Method)]
 df$gt_set = factor(df$gt_set,levels = names(gt_list))
 write.table(df,file = paste0(path,tissue_name,"_auroc.csv"),row.names = FALSE)
 ```
+
+```{r}
+# Concordance table
+do.call(cbind,lapply(gt_list[c(2,21)],function(true_marker){
+  df_benchmark$"gt" = 0
+  df_benchmark[true_marker,"gt"] = 1
+  apply(df_benchmark,2,function(x){
+    sum(df_benchmark[order(x),"gt"][1:100])
+  })
+}))
+
+# AUC curve
+p = ggplot(roc_df, aes(x = FPR, y = TPR, color = label)) +
+  geom_line(size = 0.5) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray") + labs(title = sprintf("CellMarkerDB (%d genes)",length(true_marker)),
+     x = "False Positive Rate",
+     y = "True Positive Rate") +  scale_colour_manual(values= coldef)
+```
+
 
 
 # Density Index
