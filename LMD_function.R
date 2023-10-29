@@ -166,24 +166,34 @@ Obtain_Pls <- function(W, max_time){
   names(P_ls) = 2^seq(1,floor(log(max_step,2)))
   return(P_ls)
 }
-plot_knn_graph <- function(affinity_m, label, layout){
+plot_knn_graph <- function(affinity_m, label = NULL, layout){
   layout <- as.matrix(layout)
-  g <- graph_from_adjacency_matrix(affinity_m, 'undirected')
+  g <- graph_from_adjacency_matrix(affinity_m, 'undirected', weighted = TRUE)
   V(g)$frame.color <- NA
   
-  # coldef <- c(brewer.pal(6,"Blues"),brewer.pal(6,"Reds"))
-  
-  coldef <- setNames(
-    colorRampPalette(brewer.pal(12, "Paired"))(length(unique(label))),
-    unique(label))
-  
-  col <- coldef[label]
-  names(col) <- label
-  
-  plot.igraph(g, layout = layout, vertex.size=1,
-              vertex.color=col,vertex.label=NA)
-  legend("topright",names(coldef),col=coldef,
-         pch=16,cex=0.5,bty='n')
+  if(!is.null(label)){
+    V(g)$color <- label
+    coldef <- setNames(
+      colorRampPalette(brewer.pal(12, "Paired"))(length(unique(label))),
+      unique(label))
+    p = ggraph(g,layout = layout) + 
+      geom_edge_link(aes(width = weight),color = "grey") + 
+      geom_node_point(aes(color = color), size = 1) + 
+      scale_edge_width_continuous(range = c(0.5, 1), breaks = c(0.5, 1)) + 
+      scale_color_manual(values = coldef) +
+      theme_graph()
+  }else{
+    p = ggraph(g,layout = layout) + 
+      geom_edge_link(aes(width = weight),color = "grey") + 
+      geom_node_point(size = 1) + 
+      scale_edge_width_continuous(range = c(0.5, 1), breaks = c(0.5, 1)) + 
+      theme_graph()
+  }
+  p = p + theme(
+    plot.title = element_text(face="bold", size = 30),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15))
+  return(p)
 }
 
 # Calculating Diffusion score =========
@@ -238,21 +248,28 @@ LMD <- function(expression, feature_space, knn = 5, max_time = 2^10){
 }
 
 # Visualization =========
-FeaturePlot_custom <- function(value,coord,value_name = NULL,title_name = NULL){
+FeaturePlot_custom <- function(value,coord,value_name = NULL,title_name = NULL,order_point = TRUE){
   if(length(value)!=nrow(coord)){stop("Unmatched Dimension!")}
   df = cbind(coord[,1:2],value = value)
-  df = df[order(df[,3]),]
+  if(order_point){df = df[order(df[,3]),]}
   p <- ggplot(df, aes(x=!!as.name(colnames(coord)[1]), y=!!as.name(colnames(coord)[2]), color=value)) + 
-    geom_point(size=0.2)
+    geom_point(size=0.5)
   if(!is.factor(df[,3])){
     p <- p + scale_color_gradient(low = "lightgrey", high = "blue")
   }
-  p = p + theme(legend.title = element_text(size = 8),
+  p = p + scale_x_continuous(breaks = NULL) + scale_y_continuous(breaks = NULL) +
+    theme(
+          plot.title = element_text(face="bold", size = 30),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 15),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank(),
           panel.grid = element_blank(),
-          panel.background = element_blank()) + labs(color = value_name) + ggtitle(title_name) + coord_fixed()
+          panel.background = element_blank()) + 
+    labs(color = value_name, title = title_name)
   return(p)
 }
-FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, check_time = NULL, gene_name = NULL){
+FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, check_time = NULL, gene_name = NULL, gene_color = "blue"){
   init_state = as.matrix(init_state)
   tmp <- if (!is.null(P_ls) && length(P_ls) > 0) {
     P_ls[[1]]
@@ -261,7 +278,7 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
   } else {
     NULL
   }
-  if(is.null(tmp)){stop("Cell Graph 'W' not found")}
+  if(is.null(tmp) & is.null(W)){stop("Cell Graph 'W' not found")}
   graph_node_number = ncol(tmp); rm(tmp)
   if((ncol(init_state)!=graph_node_number) & (nrow(init_state) == graph_node_number)){
     init_state = t(init_state)
@@ -283,12 +300,30 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
     check_time = c(0,check_time)
   }
   colnames(multi_state) = check_time
+  degree_node = rowSums(W) # Normalize multi_state with degree of node for visualization
   pl = lapply(seq(ncol(multi_state)),function(i){
-    FeaturePlot_custom(multi_state[,i],coord,value_name = "Density",title_name = paste0("T = ",colnames(multi_state)[i]))
+    legend_break_label = seq(0, max(multi_state[,i]), length.out = 5)
+    if(max(legend_break_label)>1e-3){
+      legend_break_label = signif(legend_break_label, digits = 2)
+    }else{
+      legend_break_label = formatC(legend_break_label, format = "e", digits = 0)
+    }
+    p = suppressWarnings({
+      FeaturePlot_custom(multi_state[,i]/max(multi_state[,i]),coord,
+                                 title_name = ifelse(as.numeric(colnames(multi_state)[i])==0,"T = 0",paste0("T = 2^",log(as.numeric(colnames(multi_state)[i]),base = 2))),
+                                 order_point = TRUE) + 
+        scale_color_gradient(name = "Density",
+                             low = "lightgrey", high = gene_color,
+                             limits = c(0,1),
+                             breaks = seq(0, 1, length.out = 5),
+                             labels = legend_break_label)
+    })
+    p
   })
-  p = plot_grid(plotlist = pl,ncol = length(check_time)) + labs(title = gene_name)
-  title = ggdraw() + draw_label(gene_name, fontface='bold')
-  p = plot_grid(title, p, ncol=1, rel_heights=c(0.1, 1))
+  
+  p = wrap_plots(pl, nrow = 1) + plot_annotation(title = gene_name,
+                                                 theme = theme(plot.title = element_text(face="bold",size = 25)) )
+  
   return(p)
 }
 FeaturePlot_meta <- function(dat, coord, feature_partition){
@@ -316,7 +351,7 @@ Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, f
   if(!all(genes %in% rownames(score_df))){stop("Genes not found!")}
   score_df = score_df[genes,]
   score_df$'gene' = rownames(score_df)
-  score_df$'label' = NA
+  score_df$'label' = score_df$'gene'
   score_df$'facet' = NA
   
   if(!is.null(label_class)){
@@ -339,23 +374,75 @@ Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, f
                        id = colnames(score_df)[!grepl("score",colnames(score_df))],
                        variable.name = c("step"), value.name = "score")
   df$step = gsub("score0_","",df$step)
+  x_breaks = unique(as.numeric(df$step))
+  names(x_breaks) = pmax(log(x_breaks,base = 2),0)
+  names(x_breaks) = ifelse(names(x_breaks) == "0",names(x_breaks),paste0("2^",names(x_breaks)))
+  x_breaks = setNames(names(x_breaks),x_breaks)
   df$step = as.factor(as.numeric(df$step))
+  levels(df$step) = x_breaks[levels(df$step)]
   
-  p = ggplot(data = df, mapping = aes(x = step, y = score, color = label)) + 
-    geom_line(aes(group = gene)) + labs(x = "Time", y = "Scaled Diffusion KL Score") + 
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)
-          ) + 
-    geom_text(data = df %>% group_by(gene) %>% slice_head(n = 4) %>% slice_tail(n = 1),
-              aes(label = gene), hjust = 0) + theme_minimal_grid()
+  if(!is.null(label_class)){
+    p = ggplot(data = df, mapping = aes(x = step, y = score, color = label)) + 
+      geom_line(aes(group = gene)) + labs(x = "Time", y = "Scaled Diffusion KL Score")  + 
+      geom_text(data = df %>% group_by(gene) %>% slice_head(n = 4) %>% slice_tail(n = 1),
+                aes(label = gene), hjust = 0) + theme(axis.text.x = element_text(angle = 45,hjust = 1))
+  }else{
+    p = ggplot(data = df, mapping = aes(x = step, y = score, color = gene)) + 
+      geom_line(aes(group = gene)) + labs(x = "Time", y = "Scaled Diffusion KL Score")
+  }
   if(!is.null(add_point)){
-    p = p + geom_point(data = df %>% filter(step %in% add_point), aes(x = step, y = score, color = label), size = 2)
+    add_point = x_breaks[as.character(add_point)]
+    add_point = add_point[!is.na(add_point)]
+    p = p + geom_point(data = df %>% filter(step %in% add_point), aes(x = step, y = score, color = label), size = 2) + 
+      theme(axis.text.x = element_text(
+        angle = 45,hjust = 1,
+        color = ifelse(levels(df$step) %in% add_point, "red", "black"),
+        face = ifelse(levels(df$step) %in% add_point, "bold", "plain")
+      ))
   }
   if(!is.null(facet_class)){
     p = p + facet_wrap(~facet,scales = "free")
   }
+  p = p + theme(
+    plot.title = element_text(face="bold", size = 30),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black")
+    )
   return(p)
 }
-
+Visualize_jaccard_mtx <- function(jaccard_mtx){
+  if(is.null(rownames(jaccard_mtx))|is.null(colnames(jaccard_mtx))){
+    stop("Please define celltype names & module names")
+  }
+  df = reshape2::melt(jaccard_mtx)
+  colnames(df)[1:2] = c("CellType","Module")
+  df$CellType = factor(df$CellType,levels = rownames(jaccard_mtx))
+  df$Module = factor(df$Module,levels = rev(colnames(jaccard_mtx)))
+  
+  p <- ggplot(df, aes(x=CellType, y=Module, fill=value)) +
+    geom_tile(color="white") +
+    scale_fill_gradientn(colors=colorRampPalette(rev(c("firebrick3", "white")))(99),limits = c(0,1), name="Jaccard Index") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle=45, hjust=1,size = 15),
+      axis.text.y = element_text(size = 15),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 15),
+      axis.title = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank()
+    ) + geom_text(data = df %>% filter(value > 0.4), 
+                  aes(label = sprintf("%.2f", value)), 
+                  color = "white", size = 4)
+  return(p)
+}
 
 # Obtain Gene Modules ========
 ## Calculate gene pairwise distance

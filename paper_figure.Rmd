@@ -26,6 +26,20 @@ total_count = tiss@meta.data$nCount_RNA
 dat_alra = as.matrix(tiss[["alra"]]@data)[selected_genes,]
 ```
 
+# SupFig - Bone-marrow Cell Embedding
+```{r}
+coldef = setNames(colorRampPalette(brewer.pal(12, "Paired"))(length(unique(cell_label))),unique(cell_label))
+p = DimPlot(tiss, group.by = "cell_ontology_class",label = FALSE, cols = coldef) + guides(color = guide_legend(ncol = 1,override.aes = list(size = 3))) + labs(title = NULL)
+
+ggsave(filename = "supfig-bonemarrow.png", plot = p, width = 8, height = 5, dpi = 300)
+# 
+# centroids <- aggregate(. ~ cell_label, data = as.data.frame(Embeddings(tiss, "tsne")), FUN = mean)
+# p <- DimPlot(tiss, group.by = "cell_ontology_class",label = FALSE, cols = coldef) + theme_void() + NoLegend() + ggtitle("Bone Marrow FACS")
+# p = p + 
+#   geom_text_repel(data = centroids, aes(x = tSNE_1, y = tSNE_2, label = cell_label, color = cell_label),
+#                    box.padding = 0.3, point.padding = 0.3, segment.color = 'grey50',max.overlaps = 100)
+```
+
 # Fig - Pipeline
 ```{r}
 source("./LMD_function.R", echo = F)
@@ -42,20 +56,26 @@ res = fast_calculate_multi_score(W = W, init_state = rho, P_ls = P_ls)
 ```
 ```{r}
 # Plot knn graph
-plot_knn_graph(affinity_m = W, label = cell_label, layout = visual_space)
+p = plot_knn_graph(affinity_m = W, layout = visual_space)
+ggsave(filename = "fig-pipeline1.png", plot = p, width = 6, height = 5, dpi = 300)
 ```
 ```{r}
 # Check Diffusion KL pattern for several genes
-genes = c("Fcnb","Uchl4")
-genes_label = c("localized","non_localized")
-check_time = c(0,8,128,1024)
-p = Visualize_score_pattern(res, genes = genes, label_class = genes_label, facet_class = NULL, add_point = check_time)
+# good gene: Igll1,Fcnb # garbage marker: Fkbp1b, Tnks1bp1, Magi2,Uchl4
+genes = c("Igll1","Tnks1bp1") 
+# genes_label = c("localized","non_localized")
+check_time = c(0,2^3,2^10,2^15)
+p = Visualize_score_pattern(res, genes = genes, add_point = check_time)
+
+ggsave(filename = "fig-pipeline2.png", plot = p, width = 8, height = 5)
 
 # Check Gene Diffusion on Cell graph by time
-pl = lapply(genes,function(gene){
-  FeaturePlot_diffusion(coord = visual_space,init_state = rho[gene,],P_ls = P_ls,check_time = check_time,gene_name = gene)
+pl = lapply(1:length(genes),function(i){
+  gene = genes[i]
+  FeaturePlot_diffusion(coord = visual_space,init_state = rho[gene,],P_ls = P_ls,W = W,check_time = check_time,gene_name = gene,gene_color = scales::hue_pal()(2)[i])
 })
-plot_grid(plotlist = pl,ncol = 1)
+p = as.ggplot(pl[[1]]) / as.ggplot(pl[[2]] & labs(title = NULL))
+ggsave(filename = "fig-pipeline3.png", plot = p, width = 16, height = 8)
 ```
 
 # Fig - the AUROC given the rank and the ground truth
@@ -85,10 +105,21 @@ levels(df_auc$Tissue) = c("Bone Marrow","Pancreas","Lung")
 # Create the plot
 fig <- ggplot(df_auc, aes(x = Tissue, y = AUROC, fill = Method)) +
   geom_bar(stat = "identity", position = "dodge") +
-  geom_text(aes(label = round(AUROC, 2)), position = position_dodge(width = 0.85), vjust = -0.25, size = 2) +
-  theme_minimal() +
+  geom_text(aes(label = round(AUROC, 2)), position = position_dodge(width = 0.85), vjust = -0.25, size = 3) +
   labs(x = "Tissue", y = "AUROC", fill = "Method") + coord_cartesian(ylim = c(0.5, 1)) +
   theme(legend.position = "bottom")  +  scale_fill_manual(values= coldef[names(coldef)%in%df_auc$Method]) + facet_wrap(~gt_set)
+fig = fig + theme(
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 15),
+          axis.title.x = element_text(size = 15),
+          axis.title.y = element_text(size = 15),
+          axis.text.x = element_text(size = 12),
+          axis.text.y = element_text(size = 10),
+          panel.grid = element_blank(),
+          axis.line = element_line(colour = "black"),
+          panel.background = element_blank(),
+          strip.background = element_rect(fill = "white", color = "white") ,
+          strip.text = element_text(size = 15, color = "black"))
 
 ggsave(filename = "fig-known_marker_comparison.png", plot = fig, width = 10, height = 5)
 ```
@@ -159,39 +190,77 @@ sub = do.call(c,lapply(method_vs_set,function(method){
   sub
 }))
 df_label_all = df_benchmark[unique(sub),c(method_vs,method_vs_set)]
-df_label_all$'legend' = sapply(seq(nrow(df_label_all)),function(i){
-  paste(paste(method_fullname[colnames(df_label_all)],df_label_all[i,],sep = ":"),collapse = "\n")
-})
+# df_label_all$'legend' = sapply(seq(nrow(df_label_all)),function(i){
+#   paste(paste(method_fullname[colnames(df_label_all)],df_label_all[i,],sep = ":"),collapse = "\n")
+# })
 g = c("Cd19","Naaa","Mogat2","Tifa","Abca13","Zf12","Il2rb","Phgdh","Vpreb2","Fyb")
-pl = lapply(g,function(x){
-  FeaturePlot(tiss,features = x,order =TRUE) + annotation_custom(grob = grid::textGrob(df_label_all[x,"legend"], x = 1, y = 1, just = c("right", "top"),gp = grid::gpar(col = "red", fontsize = 10)))
+names(g) = rep(method_vs_set,each = 2)
+pl = lapply(1:length(g),function(i){
+  x = g[i]
+  subtitle = sprintf("%s:%d, %s:%d",method_fullname[method_vs],df_label_all[x,method_vs],method_fullname[names(g)[i]],df_label_all[x,names(g)[i]])
+  color_label = ifelse(df_label_all[x,method_vs] > df_label_all[x,names(g)[i]],"red","blue")
+  FeaturePlot(tiss,features = x,order =TRUE) + labs(color = "Expression") + labs(title = x,subtitle = subtitle) + 
+    theme(
+      plot.title = element_text(face="bold", size = 30,color = color_label),
+      plot.subtitle = element_text(size = 20),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 15),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks=element_blank(),
+      axis.line = element_blank())
+  # + annotation_custom(grob = grid::textGrob(df_label_all[x,"legend"], x = 1, y = 1, just = c("right", "top"),gp = grid::gpar(col = "red", fontsize = 10)))
 })
-fig = cowplot::plot_grid(plotlist = pl[as.numeric(t(matrix(1:length(pl),nrow = 2)))],ncol = length(method_vs_set))
-ggsave(filename = "fig-ranking_comparison.png", plot = fig, width = 25, height = 10)
+pl = pl[order(seq(length(g))%%2,decreasing = TRUE)]
+pl[[1]] = pl[[1]] + labs(y = "Favored by LMD") + theme(axis.title.y = element_text(size = 20,face="bold", colour = "blue"))
+pl[[(length(pl)/2)+1]] = pl[[(length(pl)/2)+1]] + labs(y = "Favored by Other methods") + theme(axis.title.y = element_text(size = 20,face="bold", colour = "red"))
+
+fig = wrap_plots(pl,nrow = 2)
+
+ggsave(filename = "fig-ranking_comparison2.png", plot = fig, width = 25, height = 10)
 ```
 ```{r}
 pl_rank = lapply(method_vs_set,function(method){
   df_label = data.frame(df_benchmark[,c(method,method_vs)],label = rownames(df_benchmark))
-  df_label[c(which(df_label[,method] <= 100 & df_label[,method_vs] > 500)),"color"] = sprintf("Favor by %s (rank <= 100)",method)
-  df_label[c(which(df_label[,method] > 500 & df_label[,method_vs] <= 100) ),"color"] = sprintf("Favor by %s (rank <= 100)",method_vs)
+  fullmethod = method_fullname[method]
+  fullmethodvs = method_fullname[method_vs]
+  df_label[c(which(df_label[,method] <= 100 & df_label[,method_vs] > 500)),"color"] = fullmethod
+  df_label[c(which(df_label[,method] > 500 & df_label[,method_vs] <= 100) ),"color"] = fullmethodvs
   df_label$'color' = as.factor(df_label$'color')
-  p = ggplot(df_label, aes(x=!!as.name(method), y=!!as.name(method_vs),color = color)) + geom_point(size = 1) + 
-  scale_color_manual(values = c("red", "blue", "grey50"),
-                     breaks = levels(df_label$'color')) + 
-    geom_abline(intercept = 0, slope = 1, col = "grey", linetype = "dashed") + scale_x_log10(breaks = 10^(0:4), labels = expression(10^0, 10^1, 10^2, 10^3, 10^4)) +
-    scale_y_log10(breaks = 10^(0:4), labels = expression(10^0, 10^1, 10^2, 10^3, 10^4)) +
+  rank_cor = cor(log(df_label[,1:2],10))[1,2]
+  colnames(df_label)[1:2] = c("x","y")
+  p = ggplot(df_label, aes(x=x, y=y,color = color)) + geom_point(size = 1) + 
+  scale_color_manual(values = c("red","blue","grey50"),
+                     breaks = c(fullmethod,fullmethodvs),
+                     labels = c("Favored by LMD","Favored by Other methods")) + 
+    geom_abline(intercept = 0, slope = 1, col = "grey", linetype = "dashed") + 
+    scale_x_log10(breaks = 10^(0:4), labels = expression(10^0, 10^1, 10^2, 10^3, 10^4)) +
+    scale_y_log10(breaks = 10^(0:4), labels = expression(10^0, 10^1, 10^2, 10^3, 10^4)) + 
     expand_limits(x = c(1, 10^4), y = c(1, 10^4)) +
-    labs(x = paste0(method_fullname[method]," Rank"), y = paste0(method_fullname[method_vs]," Rank"), color = "Highlighted Genes") + theme_minimal() 
+    labs(x = paste0(method_fullname[method]," Rank"), 
+         y = paste0(method_fullname[method_vs]," Rank"),
+         color = "Highlighted Genes",
+         title = paste("cor =", round(rank_cor, 2)))
   # annotate gene labels
-  # library(ggrepel)
-  p = p + geom_text_repel(data = df_label %>% filter(!is.na(color)) %>% filter(label %in% g), aes(label=label),min.segment.length = unit(0, 'lines'),nudge_y = -0.5)
-  p
+  p = p + ggrepel::geom_text_repel(data = df_label %>% filter(!is.na(color)) %>% filter(label %in% g), aes(label=label),min.segment.length = unit(0, 'lines'),nudge_y = -0.5,show.legend = FALSE,size = 5)
+  p = p + theme(
+    plot.title = element_text(size = 15),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
 })
-pdf(width = 25,height = 5)
-legend = get_legend(pl_rank[[1]] +  guides(color=guide_legend(direction="horizontal")))
-prow = plot_grid(plotlist = lapply(pl_rank,function(x) x + NoLegend()), ncol = length(method_vs_set))
-plot_grid(prow, legend, ncol = 1, rel_heights = c(1, .2))
-dev.off()
+for(i in 2:length(pl_rank)){
+  pl_rank[[i]] <- pl_rank[[i]] + theme(axis.title.y=element_blank())
+}
+p = (wrap_plots(pl_rank,nrow = 1) & theme(legend.position="bottom")) + plot_layout(guides = "collect")
+
+ggsave(filename = "fig-ranking_comparison1.png", plot = p, width = 25, height = 6)
 ```
 
 
@@ -295,57 +364,96 @@ tissue_name = "marrow_facs"
 score_measure = read.table(paste0(path,tissue_name,"_density_index.csv"),header = TRUE)
 score_measure$Method = ifelse(score_measure$Method %in% names(method_fullname),method_fullname[score_measure$Method],score_measure$Method)
 
-baseline = score_measure %>% filter(Method == "all genes") %>%.$DensityIndex
-max_x = score_measure %>% filter(Method!="all genes") %>%.$TopGene %>% max()
+baseline = score_measure %>% filter(Method == "All genes") %>%.$DensityIndex
+max_x = score_measure %>% filter(Method!="All genes") %>%.$TopGene %>% max()
 
-fig = ggplot(score_measure %>% filter(Method!="all genes"), aes(x = TopGene, y = DensityIndex, color = Method, group = Method)) + geom_line(aes(linetype = Method)) + guides(linetype="none") + scale_color_manual(values= coldef[names(coldef)%in%score_measure$Method]) + geom_hline(yintercept = baseline, linetype = "dashed", color = "grey1", alpha = 0.6) + annotate("text", x = max_x, y = baseline, label = "All_genes", vjust = -1, color = "grey1")  + theme_minimal() + geom_text_repel(data = score_measure %>%  filter(Method!="all genes") %>% group_by(Method) %>% slice_head(n = 2) %>% slice_tail(n = 1), aes(label = Method), hjust = 0)
-pdf(width = 8,height = 5)
-fig
-dev.off()
+line_type = replace(coldef,names(coldef),"solid")
+line_type["Seurat v3 Wilcoxon unfiltered"] = "twodash"
+line_type["All genes"] = "dashed"
+
+fig = ggplot(score_measure %>% filter(Method!="All genes"), aes(x = TopGene, y = DensityIndex, color = Method, group = Method, linetype = Method),linewidth = 2) + 
+  geom_line(lwd = 1) +
+  scale_x_log10(breaks = 10^(2:4), labels = expression(10^2, 10^3, 10^4)) +
+    # expand_limits(x = c(50, 10^4)) +
+  geom_hline(aes(yintercept = baseline, color = "All genes", linetype = "All genes")) +
+  scale_color_manual(values= c(coldef[names(coldef)%in%score_measure$Method],"All genes" = "black")) + 
+  scale_linetype_manual(values = line_type) +
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+  # geom_text_repel(data = score_measure %>%  filter(Method!="all genes") %>% group_by(Method) %>% slice_head(n = 2) %>% slice_tail(n = 1), aes(label = Method), hjust = 0)
+
+ggsave(filename = "fig-densityindex.png", plot = fig, width = 8, height = 5)
 ```
 
-# Fig - Sensitivity Test
+# SupFig - Sensitivity Test
 ```{r}
 ## Rank Stability
 score_df = read.table(paste0(path,tissue_name,"_different_knn.csv"),header = TRUE)
 score_ranked <- data.frame(score_df) %>% mutate(across(everything(), rank))
 base = "kNN5"
-top_genes_list <- lapply(c(50,seq(100,1000,100)), 
-                         function(x) head(score_ranked[order(score_ranked[,base]),], x))
-average_ranks <- lapply(top_genes_list, function(top_genes) {
-  colMeans(top_genes)
-})
-average_ranks <- data.frame(
-  Top_Genes = c(50,seq(100,1000,100)),
-  do.call(rbind, average_ranks)
-)
-average_ranks <- average_ranks %>% tidyr::pivot_longer(cols = -Top_Genes, names_to = "kNN", values_to = "Average_Rank")
-average_ranks$kNN = as.numeric(gsub("kNN","",average_ranks$kNN))
 
-fig = ggplot(data = average_ranks, aes(x = kNN, y = Average_Rank, group = Top_Genes)) +
+top_genes = c(50,seq(100,1000,100))
+jaccard_index_bw_sets = do.call(cbind,lapply(top_genes,function(top_gene)
+    {
+     top_gene_ls = apply(score_ranked,2,function(x) rownames(score_ranked)[order(x)][1:top_gene])
+     apply(top_gene_ls,2,function(x){
+       length(intersect(x,top_gene_ls[,base]))/length(union(x,top_gene_ls[,base]))
+     })
+  }))
+colnames(jaccard_index_bw_sets) = top_genes
+df = reshape2::melt(jaccard_index_bw_sets,value.name = "JaccardIndex")
+colnames(df)[1:2] = c("kNN","Top_Genes")
+df$kNN = as.factor(as.numeric(gsub("kNN","",df$kNN)))
+df$Top_Genes = as.factor(df$Top_Genes)
+
+fig = ggplot(data = df, aes(x = kNN, y = JaccardIndex, group = Top_Genes, color = Top_Genes)) +
   geom_line() +
-  geom_point() + labs(x = "kNN", y = sprintf("Average Rank of Top # Genes\n (base on %s)",base)) + geom_vline(xintercept = 5, color="red", linetype="dashed") +
-  theme_minimal() + facet_wrap(~Top_Genes,scales = "free",labeller = as_labeller(setNames(paste0("Top",unique(average_ranks$Top_Genes)),unique(average_ranks$Top_Genes)))) + NoLegend()
-pdf(width = 8,height = 5)
-fig
-dev.off()
+  geom_point() + labs(x = "# of kNN used", y = sprintf("Jaccard Index\n (with %s)",base),color = "Top Genes") + geom_vline(xintercept = 3, color="red", linetype="dashed") + scale_y_continuous(limits = c(0,1)) +
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+ggsave(filename = "supfig-sensitivity1.png", plot = fig, width = 8, height = 5)
 ```
 ```{r}
 ## AUC stability
 auc_df = read.table(paste0(path,tissue_name,"_sensitivity_auroc.csv"),header = TRUE)
 auc_df <- auc_df %>% tidyr::pivot_longer(cols = -gt, names_to = "kNN", values_to = "AUC") %>% filter(gt %in% c("Top100","CellMarkerDB"))
 auc_df$gt = factor(auc_df$gt); levels(auc_df$gt) = c("CellMarkerDB","MacFC(Top100)")
-auc_df$kNN = as.numeric(gsub("kNN","",auc_df$kNN))
-fig = ggplot(data = auc_df, aes(x = kNN, y = AUC), group = gt) +
+auc_df$kNN = as.factor(as.numeric(gsub("kNN","",auc_df$kNN)))
+
+fig = ggplot(data = auc_df, aes(x = kNN, y = AUC, group = gt, color = gt)) +
   geom_line() +
-  geom_point() + labs(x = "kNN", y = "AUROC") + facet_wrap(~gt, scales = "free") + 
-  theme_minimal()
-pdf(width = 6,height = 3)
-fig
-dev.off()
+  geom_point() + labs(x = "# of kNN used", y = "AUROC", color = "Gold-Standard Genesets") + scale_y_continuous(limits = c(0,1)) + theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+ggsave(filename = "supfig-sensitivity2.png", plot = fig, width = 8, height = 5)
 ```
 
-# Fig - Gene-Gene Colocolization HeatMap
+# SupFig - Gene-Gene Colocolization HeatMap
 ```{r}
 load("./marrow_result/module_result.rdata")
 source("./LMD_function.R", echo = F)
@@ -368,22 +476,54 @@ p = pheatmap(as.matrix(dist),
               #              clustering_method,sep = "-"),
               silent = TRUE)
 p = as.ggplot(p)
-ggsave(filename = "fig-moduleheatmap.png", plot = p, width = 10, height = 10)
+ggsave(filename = "supfig-moduleheatmap.png", plot = p, width = 10, height = 10)
 ```
-# Fig - Module Jaccard
+
+# SupFig - Module TSNE
 ```{r}
-jaccard_index_pruned = jaccard_index[apply(jaccard_index,1,max) > 0.4,]
-jaccard_index_pruned = jaccard_index_pruned[,apply(jaccard_index_pruned,2,max) > 0.4]
+pl_module = lapply(levels(gene_partition),function(module){
+  FeaturePlot_custom(value = cell_block[,module], coord = visual_space, value_name = "Module Score",title_name = sprintf("Module %s (%d genes)",module, sum(gene_partition == module))) + scale_color_gradient(limits = c(0, 1),low = "lightgrey", high = "blue")
+})
+names(pl_module) = levels(gene_partition)
+p = (wrap_plots(pl_module,ncol = 10) & theme(plot.title = element_text(face="bold", size = 10),legend.title = element_text(size = 30),legend.text = element_text(size = 20))) + plot_layout(guides = "collect")
+
+ggsave(filename = "supfig-moduletsne.png", plot = p, width = 30, height = 18)
+```
+
+# SupFig-CellType-specific Module
+##  Matched on Cell Embeddings
+For each cell type, select the most specific modules for visualization (maximum jaccard index)
+```{r}
+# Get CellType One-hot plot
+pl_ct = lapply(colnames(one_hot_matrix),function(ct){
+  FeaturePlot_custom(value = as.factor(one_hot_matrix[,ct]), coord = visual_space, value_name = "Indicator",title_name = ct) + scale_color_manual(values = c("0" = "lightgrey", "1" = scales::hue_pal()(1)))
+})
+names(pl_ct) = colnames(one_hot_matrix)
+
+ct_module_match = apply(jaccard_index_pruned,1,function(x) colnames(jaccard_index_pruned)[which.max(x)])
+ct_module_match = gsub("M","",ct_module_match)
+
+pl <- lapply(seq(length(ct_module_match)),function(i){
+    pl_module[[ct_module_match[i]]]/
+    pl_ct[[names(ct_module_match)[i]]]
+})
+
+p = (wrap_plots(pl,ncol = 7) & theme(plot.title = element_text(face="bold", size = 10),legend.title = element_text(size = 15),legend.text = element_text(size = 10))) + plot_layout(guides = "collect")
+
+ggsave(filename = "supfig-ct-specific-module1.png", plot = p, width = 3*7, height = 3*4)
+```
+
+## Jaccard Index Heatmap
+```{r}
+thred = 0.4
+jaccard_index_pruned = jaccard_index[apply(jaccard_index,1,max) > thred,]
+jaccard_index_pruned = jaccard_index_pruned[,apply(jaccard_index_pruned,2,max) > thred]
 
 colnames(jaccard_index_pruned) = paste0("M",colnames(jaccard_index_pruned))
-p = pheatmap(t(jaccard_index_pruned)[,names(sort(apply(jaccard_index_pruned,1,which.max)))],
-         cluster_rows=FALSE, cluster_cols=FALSE, 
-         scale = "none", 
-         color = colorRampPalette(rev(c("firebrick3", "white")))(99),
-         angle_col = 45,legend_title = "Jaccard Index",silent = TRUE,
-         cellwidth = 15, cellheight = 10)
-p = as.ggplot(p)
-ggsave(filename = "jaccard_heatmap.png", plot = p, width = 5, height = 10)
+jaccard_index_pruned = jaccard_index_pruned[names(sort(apply(jaccard_index_pruned,1,which.max))),]
+p = Visualize_jaccard_mtx(jaccard_index_pruned)
+p = as.ggplot(p) + coord_fixed()
+ggsave(filename = "supfig-ct-specific-module2.png", plot = p, width = 8, height = 10)
 ```
 ```{r}
 # # Bipartite Plot
@@ -434,14 +574,92 @@ ggsave(filename = "jaccard_heatmap.png", plot = p, width = 5, height = 10)
 # grid.newpage()
 # grid.draw(get_legend(p))
 ```
-# Fig - Module TSNE
+
+## Droplet Jaccard Comparison
 ```{r}
-pl_module = lapply(levels(gene_partition),function(module){
-  FeaturePlot_custom(value = cell_block[,module], coord = visual_space, value_name = "Module Score",title_name = sprintf("Module %s (%d genes)",module, sum(gene_partition == module))) + scale_color_gradient(limits = c(0, 1),low = "lightgrey", high = "blue")
+module_selected = unlist(apply(jaccard_index[rownames(jaccard_index_droplet),],1,function(x) colnames(jaccard_index)[which(x > thred)]))
+module_selected = module_selected[order(as.numeric(module_selected))]
+
+ct_selected = unique(unlist(apply(jaccard_index[rownames(jaccard_index_droplet),module_selected],2,function(x) rownames(jaccard_index_droplet)[which(x > 0.4)])))
+ct_selected = names(sort(apply(jaccard_index[ct_selected,],1,which.max)))
+
+pl = lapply(list(jaccard_index,jaccard_index_droplet),function(mtx){
+  jaccard_index_pruned = mtx[ct_selected,module_selected]
+  colnames(jaccard_index_pruned) = paste0("M",colnames(jaccard_index_pruned))
+  Visualize_jaccard_mtx(jaccard_index_pruned)
 })
-names(pl_module) = levels(gene_partition)
-legend_module <- get_legend(pl_module[[1]])
-prow <- cowplot::plot_grid(plotlist = lapply(pl_module,function(x) x + theme(legend.position="none")), ncol = 10)
-p = cowplot::plot_grid(prow, legend_module, rel_widths = c(10, 1))
-ggsave(filename = "fig-moduletsne.png", plot = p, width = 30, height = 18)
+titles = c("FACS","Droplet")
+pl <- lapply(1:length(pl), function(i){pl[[i]] + labs(title = titles[i]) + theme(plot.title = element_text(size = 20, face = "bold"))})
+p = wrap_plots(pl,ncol = 2) + plot_layout(guides = "collect")
+ggsave(filename = "supfig-ct-specific-module3.png", plot = p, width = 10, height = 8)
 ```
+# Fig - Cell Cycle
+## Annotate CC
+```{r}
+cell_cycle = read.csv("./marrow_result/annotated_cell_cycle.csv")[["Phase"]]
+tiss$'Phase' = cell_cycle
+p1 = DimPlot(tiss,group.by = "Phase", cols = c("grey",scales::hue_pal()(3)[2:3])) + labs(title = "Phase annotated by Seurat",color = "Phase") + theme(
+  axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks=element_blank(),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 15),
+      axis.line = element_blank())
+p = wrap_plots(p1,(wrap_plots(pl_module[c(16,17,18,31,32)],ncol = 3) & theme(plot.title = element_text(size = 15))) + plot_layout(guides = "collect"),nrow = 1,design = "AABBB")
+
+ggsave(filename = "fig-module-cellcycle.png", plot = p, width = 3*5, height = 3*2)
+```
+## Reactome enrichment
+```{r}
+df = read.csv("./marrow_result/reactome_pathway_cc.csv")
+df$module = as.factor(df$module)
+df$GeneRatio = as.numeric(df$Count / table(gene_partition)[df$module])
+df$Description = factor(df$Description, levels = names(sort(table(df$Description))))
+levels(df$Description)[6] = "HDR through Homologous Recombination\n or Single Strand Annealing (SSA)"
+p = ggplot(df, aes(x=module, y=Description)) +
+  geom_point(aes(size=GeneRatio, color=p.adjust), alpha=0.7) +
+  scale_color_gradientn(colors=colorRampPalette(c("red", "blue"))(99), name="p.adjust") +
+  theme_minimal() +
+  labs(size="Gene Ratio") +
+  theme(legend.position="right",
+        axis.title = element_text(size = 20),
+        axis.text.x = element_text(size = 15),
+      axis.text.y = element_text(size = 10),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 15))
+ggsave(filename = "fig-module-cellcycle2.png", plot = p, width = 10, height = 6)
+```
+
+# SupFig - Joint-CT Module visualization
+```{r}
+level0_module = c(13,27,38,46,54)
+p = (wrap_plots(pl_module[level0_module],ncol = 5) &  theme(plot.title = element_text(size = 15))) + plot_layout(guides = "collect")
+
+ggsave(filename = "supfig-joint-module.png", plot = p, width = 5*3, height = 3)
+```
+
+# Fig - Subtype Investigation
+```{r}
+p <- DimPlot(tiss, group.by = "cell_ontology_class",label = FALSE, cols = setNames(scales::hue_pal()(2),c("late pro-B cell","granulocyte"))) + ggtitle("Pre-annotated cell types") + theme(
+  axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks=element_blank(),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 15),
+      axis.line = element_blank())
+ggsave(filename = "fig-subtype1.png", plot = p, width = 6, height = 5)
+
+pl1 = FeaturePlot(tiss,features = names(gene_partition)[gene_partition %in% c(5,6)][c(1:3,7,9)],ncol = 5,order = TRUE)
+pl2 = FeaturePlot(tiss,features = names(gene_partition)[gene_partition == 43][1:5],ncol = 5,order = TRUE)
+# pl_module_subtype = lapply(pl_module[c(5,6,43)],function(x) x + scale_color_gradient(low = "lightgrey", high = "blue"))
+
+pl = wrap_plots(pl1 & theme(plot.title = element_text(color = scales::hue_pal()(2)[1])),
+                pl2 & theme(plot.title = element_text(color = scales::hue_pal()(2)[2])),nrow = 2) & labs(color = "Expression") & theme(
+      plot.title = element_text(face="bold", size = 30),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 15),
+      axis.title = element_blank(),axis.text = element_blank(), axis.ticks=element_blank(),axis.line = element_blank())
+
+ggsave(filename = "fig-subtype2.png", plot = pl, width = 4*5 + 3, height = 4*2)
+```
+

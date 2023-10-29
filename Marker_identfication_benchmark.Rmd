@@ -380,7 +380,7 @@ score_measure =do.call(rbind,lapply(c(method_ls,"All genes"),function(method){
     top_n = length(top_gs)
   }else{
     top_gs = rownames(df_benchmark)[order(df_benchmark[,method])]
-    top_n = c(seq(100,900,100),seq(1000,5000,1000))
+    top_n = c(seq(50,90,10),seq(100,900,100),seq(1000,3000,500),seq(4000,9000,1000),seq(10000,max(df_benchmark),2000))
   }
   result = unlist(lapply(top_n, function(top){
     tiss <- RunPCA(tiss, features = top_gs[1:top], npcs = 20)
@@ -423,7 +423,7 @@ score_df = do.call(cbind,lapply(c(3:10,20,30,40,50),function(kNN){
   },silent = TRUE)
 }))
 colnames(score_df) = paste0("kNN",c(3:10,20,30,40,50))
-write.table(score_df,file = paste0(path,tissue_name,"_different_knn.csv"),row.names = FALSE)
+write.table(score_df,file = paste0(path,tissue_name,"_different_knn.csv"),row.names = TRUE)
 ```
 ```{r}
 # Obtain AUROC
