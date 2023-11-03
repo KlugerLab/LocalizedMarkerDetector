@@ -302,7 +302,7 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
   colnames(multi_state) = check_time
   degree_node = rowSums(W) # Normalize multi_state with degree of node for visualization
   pl = lapply(seq(ncol(multi_state)),function(i){
-    legend_break_label = seq(0, max(multi_state[,i]), length.out = 5)
+    legend_break_label = seq(0, max(multi_state[,i]), length.out = 2)
     if(max(legend_break_label)>1e-3){
       legend_break_label = signif(legend_break_label, digits = 2)
     }else{
@@ -310,12 +310,14 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
     }
     p = suppressWarnings({
       FeaturePlot_custom(multi_state[,i]/max(multi_state[,i]),coord,
-                                 title_name = ifelse(as.numeric(colnames(multi_state)[i])==0,"T = 0",paste0("T = 2^",log(as.numeric(colnames(multi_state)[i]),base = 2))),
+                                 title_name = ifelse(as.numeric(colnames(multi_state)[i])==0,
+                                                     latex2exp::TeX("$T = 0$"),
+                                                     latex2exp::TeX(paste0("$T = 2^{",log(as.numeric(colnames(multi_state)[i]),base = 2),"}$"))),
                                  order_point = TRUE) + 
         scale_color_gradient(name = "Density",
                              low = "lightgrey", high = gene_color,
                              limits = c(0,1),
-                             breaks = seq(0, 1, length.out = 5),
+                             breaks = seq(0, 1, length.out = 2),
                              labels = legend_break_label)
     })
     p
@@ -383,12 +385,12 @@ Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, f
   
   if(!is.null(label_class)){
     p = ggplot(data = df, mapping = aes(x = step, y = score, color = label)) + 
-      geom_line(aes(group = gene)) + labs(x = "Time", y = "Scaled Diffusion KL Score")  + 
+      geom_line(aes(group = gene)) + labs(x = "Time", y = "Normalized Diffusion KL Score")  + 
       geom_text(data = df %>% group_by(gene) %>% slice_head(n = 4) %>% slice_tail(n = 1),
                 aes(label = gene), hjust = 0) + theme(axis.text.x = element_text(angle = 45,hjust = 1))
   }else{
     p = ggplot(data = df, mapping = aes(x = step, y = score, color = gene)) + 
-      geom_line(aes(group = gene)) + labs(x = "Time", y = "Scaled Diffusion KL Score")
+      geom_line(aes(group = gene)) + labs(x = "Time", y = "Normalized Diffusion KL Score")
   }
   if(!is.null(add_point)){
     add_point = x_breaks[as.character(add_point)]
@@ -411,8 +413,8 @@ Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, f
     axis.title.y = element_text(size = 20),
     axis.text.x = element_text(size = 15),
     axis.text.y = element_text(size = 15),
-    panel.grid = element_blank(),
-    panel.background = element_blank(),
+    # panel.grid = element_blank(),
+    # panel.background = element_blank(),
     axis.line = element_line(colour = "black")
     )
   return(p)

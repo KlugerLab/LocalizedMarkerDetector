@@ -1,5 +1,5 @@
 ---
-title: "Tutorial for Runing Mouse Bone Marrow Dataset"
+title: "Tutorial for Runing LMD on Mouse Bone Marrow Dataset"
 author: "Ruiqi Li"
 date: '2023-10-12'
 output: pdf_document
@@ -7,7 +7,6 @@ bibliography: references.bib
 ---
 
 # Install & Load Packages
-
 ```{r}
 # Install necessary tools if not already present
 if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
@@ -26,16 +25,23 @@ cran_packages <- c("igraph","ggplot2", "cowplot", "RColorBrewer",
 sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
 sapply(github_packages, function(pkg) if (!requireNamespace(strsplit(pkg, "/")[[1]][2], quietly = TRUE)) remotes::install_github(pkg))
-
 library("Seurat")
 library("SeuratWrappers")
 library("pheatmap")
 library("ggplot2")
 library("ggplotify")
 ```
+# Create a folder to save results
+```{r}
+folder_path = "marrow_result"
+if (!dir.exists(path)) {
+  # If it doesn't exist, create it
+  dir.create(path)
+} else {
+}
+```
 
 # Preparing input data
-
 ```{r}
 if (!file.exists('facs_Marrow_seurat_tiss.Robj')) {
    # If load url doesn't work, please download it and load from your working directory
@@ -73,7 +79,7 @@ dat = dat[selected_genes,,drop = FALSE]
 This provides a step-by-step tutorial for a better understanding of the algorithm. If you want to generate results directly, please skip to 'Running LMD in One Step'
 
 ```{r}
-source("./LMD_function.R", echo = F)
+source("LMD_function.R", echo = F)
 ```
 
 ## Step1: Build KNN Graph
@@ -131,7 +137,7 @@ local_gene = show_result_lmd(lmd_result, n = 1000)
 local_gene = rownames(local_gene)
 
 # Denoising
-#' We use ALRA @linderman2022zero to Denoise our data
+# We use ALRA @linderman2022zero to Denoise our data
 tiss <- RunALRA(tiss, assay = "RNA")
 DefaultAssay(tiss) <- "RNA"
 dat_alra = as.matrix(tiss[["alra"]]@data)[local_gene,]
@@ -204,7 +210,6 @@ abbrev[grepl("megakaryocyte",abbrev)] = "MEP"
 abbrev[grepl("hematopoietic",abbrev)] = "HSC"
 abbrev[grepl("hematopoietic",abbrev)] = "HSC"
 abbrev[grepl("granulocyte monocyte",abbrev)] = "GMP"
-# abbrev[grepl("granulocytopoietic",abbrev)] = "G-poiesis"
 names(abbrev) = levels(cell_label)
 levels(cell_label) = abbrev[levels(cell_label)]
 
@@ -213,18 +218,12 @@ one_hot_matrix <- sapply(unique(cell_label), function(x) as.integer(cell_label =
 colnames(one_hot_matrix) = unique(cell_label)
 rownames(one_hot_matrix) = names(cell_label)
 
-# # Order Cell Type based on its centroid in Featurespace
-# Idents(tiss) = cell_label
-# ordered_cell_types <- unique(cell_label)[hclust(dist(t(sapply(unique(cell_label), function(x) colMeans(Embeddings(tiss, reduction = "pca")[WhichCells(tiss, idents = x), ,drop = FALSE]) ))))$order]
-
 # Calculate Jaccard index between module activity & cell type
 jaccard_index <- apply(cell_block, 2, function(module_col) {
   apply(one_hot_matrix, 2, function(one_hot_col) {
     1 - philentropy::distance(rbind(module_col,one_hot_col), method = "jaccard", mute.message=TRUE)
   })
 })
-# jaccard_index = jaccard_index[rev(ordered_cell_types),]
-# rm(ordered_cell_types)
 ```
 
 ### Annotate Each Celltype-specific activated Modules with its corresponding Celltypes
@@ -242,11 +241,8 @@ if (!file.exists('droplet_Marrow_seurat_tiss.Robj')) {
                 destfile = 'droplet_Marrow_seurat_tiss.Robj', method = 'libcurl')
  }
 load('droplet_Marrow_seurat_tiss.Robj')
-tiss_droplet <- UpdateSeuratObject(tiss_droplet)
-
-# path <- "/data/ruiqi/local_marker/dataset/tabular_muris/"
-# tissue_name = "marrow_droplet"
-# tiss_droplet <- readRDS(sprintf("%s%s.rds",path,tissue_name))
+tiss_droplet <- UpdateSeuratObject(tiss)
+saveRDS(tiss_droplet, file = "processed_droplet_Marrow_srat.rds")
 
 feature_space_droplet = as.matrix(tiss_droplet@reductions$pca@cell.embeddings[,1:n_dim])
 dat_droplet = as.matrix(tiss_droplet[["RNA"]]@data)
@@ -277,7 +273,9 @@ jaccard_index_droplet <- apply(cell_block_droplet, 2, function(module_col) {
 ```
 ## Save Intermediate data
 ```{r}
-save(gene_partition,dist,gene_hree,cell_block,cell_block_droplet,one_hot_matrix,one_hot_matrix_droplet,jaccard_index,jaccard_index_droplet,file = "./marrow_result/module_result.rdata")
+save(gene_partition,dist,gene_hree,cell_block,cell_block_droplet,one_hot_matrix,one_hot_matrix_droplet,jaccard_index,jaccard_index_droplet,file = file.path(folder_path, "module_result.rdata"))
+
+saveRDS(tiss, file = "processed_facs_Marrow_srat.rds")
 ```
 
 ## Step4: Module Enrichment Analysis
@@ -288,8 +286,7 @@ library("ReactomePA")
 library("org.Mm.eg.db")
 library("AnnotationDbi")
 
-# Set all genes(after filtering) in the expression matrix as background,
-# such that the enrichment result of any module is not attributed to its high expression levels
+# Set all genes(after filtering) in the expression matrix as background
 universe_df = data.frame("symbol" = rownames(dat),"entrez" = mapIds(org.Mm.eg.db, keys=rownames(dat), column="ENTREZID", keytype="SYMBOL"))
 
 # Filter GO terms based on p values < 0.05
@@ -317,8 +314,7 @@ top_enrich_go <- lapply(top_go_clusters, function(i) ego_result[[i]]@result[1:5,
 library("ReactomePA")
 library("org.Mm.eg.db")
 
-# Set all genes(after filtering) in the expression matrix as background,
-# such that the enrichment result of any module is not attributed to its high expression levels
+# Set all genes(after filtering) in the expression matrix as background
 universe_df = data.frame("symbol" = rownames(dat),"entrez" = mapIds(org.Mm.eg.db, keys=rownames(dat), column="ENTREZID", keytype="SYMBOL"))
 universe_df = universe_df[!is.na(universe_df$entrez),]
 
@@ -354,7 +350,7 @@ df_module[top_pathway_clusters,"Pathway_description"] = unlist(lapply(top_enrich
   paste(des[!is.na(des)],collapse = ",")
 }))
 df_module[is.na(df_module)] = ""
-write.csv(df_module,file = "./marrow_result/module_description.csv",row.names = FALSE)
+write.csv(df_module,file = file.path(folder_path, "module_description.csv"),row.names = FALSE)
 ```
 
 ## Cell Cycle Modules
@@ -378,61 +374,25 @@ top_enrich_pathway_cc <- do.call(rbind,lapply(1:length(epathway_result_cc), func
 top_enrich_pathway_cc <- top_enrich_pathway_cc[complete.cases(top_enrich_pathway_cc), ]
 top_enrich_pathway_cc = top_enrich_pathway_cc %>% filter(p.adjust < 0.05)
 
-write.csv(top_enrich_pathway_cc,file = "./marrow_result/reactome_pathway_cc.csv")
+write.csv(top_enrich_pathway_cc,file = file.path(folder_path, "reactome_pathway_cc.csv"))
 ```
+
 ### Annotate Cell Cycle
 ```{r}
-library(gprofiler2)
-mmus_s = gorth(cc.genes.updated.2019$s.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
-mmus_g2m = gorth(cc.genes.updated.2019$g2m.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
+mmus_s = gprofiler2::gorth(cc.genes.updated.2019$s.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
+mmus_g2m = gprofiler2::gorth(cc.genes.updated.2019$g2m.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
 tiss = CellCycleScoring(tiss, s.features = mmus_s, 
                         g2m.features = mmus_g2m, set.ident = FALSE)
-cell_cycle_table = tiss@meta.data[,c("S.Score","G2M.Score","Phase")]
-write.csv(cell_cycle_table,file = "./marrow_result/annotated_cell_cycle.csv")
+cell_cycle_table = data.frame(tiss@meta.data[,c("S.Score","G2M.Score","Phase")],"Dataset" = "FACS")
 ```
 
+### Transferablity
+```{r}
+tiss_droplet = CellCycleScoring(tiss_droplet, s.features = mmus_s, 
+                        g2m.features = mmus_g2m, set.ident = FALSE)
+cell_cycle_table = rbind(cell_cycle_table,data.frame(tiss_droplet@meta.data[,c("S.Score","G2M.Score","Phase")],"Dataset" = "Droplet"))
 
-<!-- ## Multi-resolution Modules - analysis -->
-<!-- ```{r} -->
-<!-- df_module = read.csv("./marrow_result/module_description.csv") -->
-<!-- df_module$'multi-celltype' = NA -->
-<!-- df_module$'note' = NA -->
-
-
-<!-- ct_prob_per_module = do.call(rbind,lapply(unique(cell_label),function(x){apply(cell_block[cell_label == x,],2,median)})) -->
-<!-- rownames(ct_prob_per_module) = unique(cell_label) -->
-<!-- ct_num_per_module = sort(apply(ct_prob_per_module,2,function(x)sum(x > 0.5))) -->
-
-<!-- m = 19 -->
-<!-- df_module[m,"celltype"] = paste0(names(which(ct_prob_per_module[,m] > 0.5)),collapse = ",") -->
-
-<!-- df_module[54,"multi-celltype"] = c("T/NK/NKT") -->
-<!-- df_module[27,"multi-celltype"] = c("Progenitor/NK/NKT") -->
-<!-- df_module[33,"multi-celltype"] = c("Progenitor/basophil/granulocytopoietic/half-granulocyte") -->
-<!-- df_module[46,"multi-celltype"] = c("monocyte/granulocytopoietic/half-granulocyte") -->
-<!-- df_module[48,"multi-celltype"] = c("monocyte/granulocytopoietic/granulocyte") -->
-<!-- df_module[49,"multi-celltype"] = c("monocyte/macrophage/granulocytopoietic/granulocyte") -->
-<!-- df_module[55,"multi-celltype"] = c("NK") -->
-<!-- df_module[56,"multi-celltype"] = c("NK") -->
-<!-- df_module[13,"multi-celltype"] = c("B") -->
-<!-- df_module[50,"multi-celltype"] = c("monocyte/granulocytopoietic/granulocyte/basophil") -->
-<!-- df_module[28,"multi-celltype"] = c("Progenitor") -->
-<!-- df_module[9,"multi-celltype"] = c("immature/naive B") -->
-<!-- df_module[11,"multi-celltype"] = c("late pro/pre B") -->
-<!-- df_module[7,"multi-celltype"] = c("late pro/pre B") -->
-<!-- df_module[44,"multi-celltype"] = c("granulocytopoietic/half-granulocyte") -->
-<!-- df_module[47,"multi-celltype"] = c("granulocytopoietic/granulocyte") -->
-<!-- df_module[52,"multi-celltype"] = c("T") -->
-<!-- df_module[53,"multi-celltype"] = c("macrophage/NK") -->
-<!-- df_module[1,"multi-celltype"] = c("monocyte/macrophage/granulocyte monocyte progenitor cell") -->
-<!-- df_module[20,"multi-celltype"] = c("granulocytopoietic/Progenitor") -->
-<!-- df_module[c(42,35),"multi-celltype"] = c("below-half-granulocyte/monocyte") -->
-<!-- df_module[c(36,38),"multi-celltype"] = c("granulocyte monocyte progenitor cell/monocyte") -->
-<!-- df_module[2,"multi-celltype"] = c("granulocyte monocyte progenitor cell/macrophage") -->
-<!-- df_module[4,"celltype"] = c("granulocyte monocyte progenitor cell") -->
-<!-- df_module[c(5,6,43),"note"] = "subtype" -->
-
-<!-- df_module[c(16,18,17,31,32),'note'] = "cell_cycle" -->
-<!-- ``` -->
+write.csv(cell_cycle_table,file = file.path(folder_path, "annotated_cell_cycle.csv"))
+```
 
 
