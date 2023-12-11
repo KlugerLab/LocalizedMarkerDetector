@@ -78,6 +78,15 @@ selected_genes = (Gene_detected_count >= 10) & (Gene_detected_count <= ncol(dat)
 dat = dat[selected_genes,,drop = FALSE]
 ```
 
+```{r}
+# # save to hdf5 file
+# df = sub.srat@meta.data[,c("design_coarse","celltype1205")]
+# # BiocManager::install("rhdf5")
+# library(rhdf5)
+# h5write(dat, 'Bone_marrow_facs_mtx.h5', 'dataset')
+# fwrite(df,file = "HL234_meta.txt",row.names = TRUE)
+```
+
 # Running LMD Step by Step
 
 This provides a step-by-step tutorial for a better understanding of the algorithm. If you want to generate results directly, please skip to 'Running LMD in One Step'
