@@ -43,6 +43,10 @@ if (!dir.exists(path)) {
 
 # Preparing input data
 ```{r}
+# tiss <- readRDS("/data/ruiqi/local_marker/dataset/tabular_muris/marrow_facs.rds")
+```
+
+```{r}
 if (!file.exists('facs_Marrow_seurat_tiss.Robj')) {
    # If load url doesn't work, please download it and load from your working directory
   options(timeout=6000)
@@ -116,7 +120,7 @@ score_result = fast_calculate_multi_score(W = W, init_state = rho, P_ls = P_ls)
 # Check Diffusion KL pattern for several genes
 genes = c("Tlr11","Fcnb","Cd79a","4933425H06Rik","Uchl4","Dock11")
 genes_label = rep(c("good","bad"),each = 3)
-Visualize_score_pattern(score_result, genes = genes, label_class = genes_label, facet_class = NULL)
+Visualize_score_pattern(score_result$'score_profile', genes = genes, label_class = genes_label, facet_class = NULL)
 
 # Show result
 show_result_lmd(score_result,n = 10)
@@ -125,7 +129,9 @@ show_result_lmd(score_result,n = 10)
 # Running LMD in one step
 
 ```{r}
+tic()
 lmd_result = LMD(dat, feature_space)
+toc()
 ```
 
 # Identify Gene Modules

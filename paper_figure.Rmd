@@ -7,6 +7,7 @@ date: '2023-10-16'
 # Load Data & Preprocess
 ```{r}
 library("Seurat")
+library("RColorBrewer")
 # tissue_name = "marrow_facs"
 # tiss <- readRDS(sprintf("%s%s.rds",path,tissue_name))
 tiss <- readRDS("processed_facs_Marrow_srat.rds")
@@ -353,6 +354,7 @@ ggsave(filename = "fig-densityindex.png", plot = fig, width = 5, height = 5)
 
 # SupFig - Sensitivity Test
 ```{r}
+path = "./marrow_result/"
 ## Rank Stability
 score_df = read.table(paste0(path,tissue_name,"_different_knn.csv"),header = TRUE)
 score_ranked <- data.frame(score_df) %>% mutate(across(everything(), rank))
@@ -374,7 +376,8 @@ df$Top_Genes = as.factor(df$Top_Genes)
 
 fig = ggplot(data = df, aes(x = kNN, y = JaccardIndex, group = Top_Genes, color = Top_Genes)) +
   geom_line() +
-  geom_point() + labs(x = "# of kNN used", y = sprintf("Jaccard Index\n (with %s)",base),color = "Top Genes") + geom_vline(xintercept = 3, color="red", linetype="dashed") + scale_y_continuous(limits = c(0,1)) +
+  geom_point() + labs(x = "# of kNN used", y = sprintf("Jaccard Index\n (with %s)",base),color = "Top Genes") + geom_vline(xintercept = 3, color="red", linetype="dashed") + 
+  # scale_y_continuous(limits = c(0,1)) +
   theme(
     legend.title = element_text(size = 20),
     legend.text = element_text(size = 15),
@@ -397,7 +400,9 @@ auc_df$kNN = as.factor(as.numeric(gsub("kNN","",auc_df$kNN)))
 
 fig = ggplot(data = auc_df, aes(x = kNN, y = AUC, group = gt, color = gt)) +
   geom_line() +
-  geom_point() + labs(x = "# of kNN used", y = "AUROC", color = "Gold-Standard Genesets") + scale_y_continuous(limits = c(0,1)) + theme(
+  geom_point() + labs(x = "# of kNN used", y = "AUROC", color = "Gold-Standard Genesets") + 
+  # scale_y_continuous(limits = c(0,1)) + 
+  theme(
     legend.title = element_text(size = 20),
     legend.text = element_text(size = 15),
     axis.title.x = element_text(size = 20),

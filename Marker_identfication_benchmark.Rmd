@@ -4,6 +4,7 @@ author: "Ruiqi Li"
 output: pdf_document
 date: '2023-10-16'
 ---
+
 # Load Packages
 ```{r}
 if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
@@ -18,7 +19,11 @@ library("dplyr")
 # Load Data & Process
 ## Load Data
 ```{r}
-tissue_fullname = "Marrow"
+# tiss <- readRDS("/data/ruiqi/local_marker/dataset/tabular_muris/marrow_facs.rds")
+```
+
+```{r}
+tissue_fullname = "Bone marrow"
 
 if(tissue_fullname == "Bone marrow"){
   tissue_name = "marrow_facs"
@@ -50,8 +55,18 @@ if(tissue_fullname == "Bone marrow"){
    }
   load('facs_Lung_seurat_tiss.Robj')
   tiss <- UpdateSeuratObject(tiss)
+}if(tissue_fullname == "Thymic"){
+  options(timeout=6000)
+  if (!file.exists('Human_Thymic_Epithelial_seurat_tiss.Robj')) {
+     # If load url doesn't work, please download it and load from your working directory
+    options(timeout=6000)
+    download.file("https://datasets.cellxgene.cziscience.com/046d2e35-2ee6-4159-8db7-7b1039fe0005.rds",
+                  destfile = 'Human_Thymic_Epithelial_seurat_tiss.Robj', method = 'libcurl')
+  }
+  tiss <- readRDS()
 }
 
+tissue_fullname = "Bone marrow"
 ```
 ## Process
 ```{r}
@@ -127,7 +142,7 @@ Genes were ranked by the increasing order of Cumulative Diffusion-KL score
 ```{r}
 method = "lmd"
 source("LMD_function.R", echo = F)
-res = LMD(dat,feature_space,max_time = 2^10,knn = 7)
+res = LMD(dat,feature_space,max_time = 2^10,knn = 5)
 marker = show_result_lmd(res, n = length(selected_genes))
 marker[order(marker$score),'rank'] = 1:nrow(marker)
 write.table(marker,file = file.path(folder_path, paste0(method,"_",tissue_name,".csv")),row.names = TRUE)
@@ -339,7 +354,7 @@ write.table(df_benchmark,file = file.path(folder_path, paste0(tissue_name,"_benc
 ```{r}
 df_benchmark = read.table(file.path(folder_path, paste0(tissue_name,"_benchmark_rank_table.csv")))
 
-method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg")
+method_ls = c("lmd","lmd_gaussian","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg")
 ```
 ```{r}
 max_logfc = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c1.txt"))) %>% rownames()
@@ -437,7 +452,7 @@ score_df = do.call(cbind,lapply(c(3:10,20,30,40,50),function(kNN){
   },silent = TRUE)
 }))
 colnames(score_df) = paste0("kNN",c(3:10,20,30,40,50))
-write.table(score_df,file = file.path(folder_path, paste0(tissue_name,"_different_knn.csv")),row.names = TRUE)
+write.table(score_df,file = file.path("marrow_result", paste0(tissue_name,"_different_knn.csv")),row.names = TRUE)
 ```
 ```{r}
 # Obtain AUROC
@@ -457,7 +472,7 @@ auc_df = apply(score_ranked,2,function(x){
 })
 
 auc_df = data.frame(auc_df,gt = names(gt_list))
-write.table(auc_df,file = file.path(folder_path, paste0(tissue_name,"_sensitivity_auroc.csv")),row.names = FALSE)
+write.table(auc_df,file = file.path("marrow_result", paste0(tissue_name,"_sensitivity_auroc.csv")),row.names = FALSE)
 ```
 
 

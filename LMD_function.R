@@ -1,7 +1,7 @@
 cran_packages <- c("igraph","ggplot2", "cowplot", "RColorBrewer", 
                    "data.table", "dplyr", "patchwork", 
                    "pheatmap", "ggplotify", "ggraph", 
-                   "ClusterR", "Rcpp", "RcppArmadillo", "tictoc")
+                   "ClusterR", "Rcpp", "RcppArmadillo", "tictoc","RSpectra")
 sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 lapply(cran_packages, require, character.only = TRUE)
 
@@ -68,13 +68,13 @@ sinkhorn_knopp = function(A, sums = rep(1, nrow(A)),
   while( t <= niter && !converged) {
     r = sums / (A %*% c)
     cnew = sums / (t(A) %*% r)
-    
+
     # Symmetric Sinkhorn--Knopp algorithm could oscillate between two sequences,
     # need to bring the two sequences together (See for example "Algorithms For
     # The Equilibration Of Matrices And Their Application To Limited-memory
     # Quasi-newton Methods")
     if (sym) cnew = (cnew + r)/2
-    
+
     delta = l2_norm(cnew-c)
     if (delta < tol) converged = TRUE
     if (verb) nett::printf("err = %3.5e\n", delta)
@@ -93,65 +93,117 @@ Doubly_stochastic <- function(W){
 
 # Build Cell Graph & Transition Mtx =======
 findDisconnectedComponents <- function(adj_matrix) {
-  
   # Create a graph from the adjacency matrix
   g <- graph_from_adjacency_matrix(adj_matrix, mode = "undirected")
-  
   # Find the connected components
   components <- components(g)
-  
   # Get the number of disconnected components
   num_components <- components$no
-  
   # Get the corresponding nodes for each component
   component_nodes <- split(V(g), components$membership)
-  
   list(number_of_components = num_components, components = component_nodes)
 }
-Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust = FALSE){
+findShortestEdge <- function(component1, component2, data) {
+  # Calculate all pairwise distances between nodes in the two components
+  distances <- outer(component1, component2, Vectorize(function(x, y) dist(data[c(x,y), ])))
+  # Find the minimum distance and the corresponding nodes
+  min_distance_idx <- which(distances == min(distances), arr.ind = TRUE)
+  return(c(component1[min_distance_idx[1]], component2[min_distance_idx[2]]))
+}
+
+Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE){
   knn_list <- FNN::get.knn(feature_space, k = knn, algorithm = "kd_tree")
-  # Adjacency matrix
-  A <- matrix(0,nrow = nrow(feature_space), ncol = nrow(feature_space), dimnames = list(rownames(feature_space), rownames(feature_space) ))
-  for(i in 1:nrow(A)){
-    A[i, knn_list[[1]][i,] ] = 1
-  }
+  Idx = knn_list$nn.index
+  A = Matrix::sparseMatrix(i = rep(1:nrow(Idx),each = knn),
+                           j = c(t(Idx)),
+                           dims = c(nrow(Idx), nrow(Idx)),
+                           x = 1)
+  rownames(A) = colnames(A) = rownames(feature_space)
   
+  # remove orphans/singletons
   res = findDisconnectedComponents(A)
   filtered_components <- lapply(res$components, function(comp) if (length(comp) >= 5) comp else NULL)
   filtered_components <- Filter(Negate(is.null), filtered_components)
-  
-  if(adjust){
-    while(length(filtered_components) >= 2){
-      knn = knn + 1
-      knn_list <- FNN::get.knn(feature_space, k = knn, algorithm = "kd_tree")
-      # Adjacency matrix
-      A <- matrix(0,nrow = nrow(feature_space), ncol = nrow(feature_space), dimnames = list(rownames(feature_space), rownames(feature_space) ))
-      for(i in 1:nrow(A)){
-        A[i, knn_list[[1]][i,] ] = 1
-      }
-      
-      res = findDisconnectedComponents(A)
-      filtered_components <- lapply(res$components, function(comp) if (length(comp) >= 5) comp else NULL)
-      filtered_components <- Filter(Negate(is.null), filtered_components)
-    }
-    print(paste0("Final kNN: ",knn))
-  }
-  if (length(filtered_components) >= 2) {
-    stop("Disconnected Components, Please increase knn.")
-  }
-  
   filtered_node_names <- unlist(lapply(filtered_components, function(comp) names(comp)))
   A = A[rownames(A)%in%filtered_node_names,
         colnames(A)%in%filtered_node_names]
   
-  # Graph affinity matrix
-  W = (A + t(A))/2
-  diag(A) = 1
+  # Connect Components Using MST Principles
+  if(adjust_by_MST){
+    while(length(filtered_components) > 1){
+      edgesToAdd <- lapply(1:(length(filtered_components)-1), function(i) {
+        lapply((i + 1):length(filtered_components), function(j) {
+          findShortestEdge(filtered_components[[i]], filtered_components[[j]], feature_space)
+        })
+      })
+      edgesToAdd = do.call(rbind.data.frame, lapply(unlist(edgesToAdd, recursive = FALSE),function(x) names(x))) %>% distinct()
+      for (i in 1:nrow(edgesToAdd)) {
+        A[edgesToAdd[i,1],edgesToAdd[i,2]] = 1
+      }
+      res = findDisconnectedComponents(A)
+      filtered_components = res$components
+    }
+  }
+  
+  # if(adjust){
+  #   while(length(filtered_components) >= 2){
+  #     knn = knn + 1
+  #     knn_list <- FNN::get.knn(feature_space, k = knn, algorithm = "kd_tree")
+  #     Idx = knn_list$nn.index
+  #     # Adjacency matrix
+  #     A = Matrix::sparseMatrix(i = rep(1:nrow(Idx),each = knn),
+  #                              j = c(t(Idx)),
+  #                              dims = c(nrow(Idx), nrow(Idx)),
+  #                              x = 1)
+  #     rownames(A) = colnames(A) = rownames(feature_space)
+  #     res = findDisconnectedComponents(A)
+  #     filtered_components <- lapply(res$components, function(comp) if (length(comp) >= 5) comp else NULL)
+  #     filtered_components <- Filter(Negate(is.null), filtered_components)
+  #   }
+  #   print(paste0("Final kNN: ",knn))
+  # }
+  
+  if (length(filtered_components) >= 2) {
+    stop("Disconnected Components, Please increase knn.")
+  }
+
+  A = as.matrix(A)
+  
+  # Graph affinity matrix by symmetrize the adjacency mtx
+  # W = (A + t(A))/2 # weighted
+  W = pmin(A + t(A),1) # unweighted
+
   return(list(graph = W,adj_matrix = A, component = filtered_components))
+}
+Symmetric_gaussian_graph <- function(knn = 5, feature_space, alpha = 1, coef = 2, epsilon = 1e-3){
+  node_num = nrow(feature_space)
+  knn_list <- FNN::get.knn(feature_space, k = node_num - 1, algorithm = "kd_tree")
+  Idx = knn_list$nn.index
+
+  # Gaussian Kernel transfer
+  knn_dist = knn_list$nn.dist
+  bandwidth = coef * (knn_dist[,knn])^2
+  knn_dist = (knn_dist^2 / bandwidth)^alpha
+  knn_dist = exp(-knn_dist)
+  knn_dist[knn_dist < epsilon] = 0 # make graph sparse
+
+  A = Matrix::sparseMatrix(i = rep(1:node_num,each = ncol(Idx)),
+                           j = c(t(Idx)),
+                           dims = c(node_num, node_num),
+                           x = c(t(knn_dist)))
+  rownames(A) = colnames(A) = rownames(feature_space)
+  A = as.matrix(A)
+
+  # Graph affinity matrix (by default graph is connected)
+  W = (A + t(A))/2
+  A = W > 0
+
+  return(list(graph = W,adj_matrix = A))
 }
 Obtain_Pls <- function(W, max_time){
   P = Doubly_stochastic(W)
   # P = Rowwise_normalize(W)
+  # eig_res = RSpectra::eigs_sym(P, k = 1, which = "LM")
   max_step = max_time
   P_ls = NULL
   if(max_step < 1){
@@ -197,53 +249,110 @@ plot_knn_graph <- function(affinity_m, label = NULL, layout){
 }
 
 # Calculating Diffusion score =========
-fast_calculate_multi_score <- function(W, max_time = 2^10, init_state, P_ls = NULL){
+fast_calculate_multi_score <- function(W, max_time = 2^15, init_state, P_ls = NULL, correction = TRUE){
   if((ncol(W) != ncol(init_state)) & (ncol(W) == nrow(init_state))){
     init_state = t(init_state)
   }
   if(ncol(W) != ncol(init_state)){
     stop("Check the dimension!")
   }
-  # degree = rowSums(W)/sum(rowSums(W))
-  degree = rep(1/nrow(W),nrow(W))
-  
+  # degree = rowSums(W)/sum(rowSums(W)) # row-stochastic
+  degree = rep(1/nrow(W),nrow(W)) # bi-stochastic
+
   # Calculate transition matrix
   if(is.null(P_ls)){
     P_ls = Obtain_Pls(W,max_time)
   }
+  P_ls = c(list(diag(nrow(W))),P_ls) # Add t = 0
+  names(P_ls)[1] = "0"
+
+  # # Calculate multi-scale KL divergence
+  # score_df = do.call(cbind,lapply(P_ls,function(P){
+  #   state = fastMatMult(init_state, P)
+  #   c(fastKLMatrix(init_state, state),fastKLVector(state,degree))
+  # }) )
+  # score_df = cbind(score_df[1:nrow(init_state),],
+  #                  score_df[(nrow(init_state)+1):nrow(score_df),])
+  # colnames(score_df) = paste0(rep(c("score0_","score1_"), each = ncol(score_df)/2),
+  #                             colnames(score_df))
+  # score_df = cbind(score_df,fastKLVector(init_state,degree))
+  # colnames(score_df)[ncol(score_df)] = "score1_0"
+  # score_df = score_df[,c(1:floor(ncol(score_df)/2),ncol(score_df),(floor(ncol(score_df)/2)+1):(ncol(score_df)-1))]
+  # rownames(score_df) = rownames(init_state)
+  # sub_score0 = grep("score0",colnames(score_df))
+  # sub_score1 = grep("score1_0",colnames(score_df))
+  # score_df = data.frame(score_df[,sub_score0]/score_df[,sub_score1])
+  # cumulative_score = rowSums(score_df)
   
   # Calculate multi-scale KL divergence
   score_df = do.call(cbind,lapply(P_ls,function(P){
     state = fastMatMult(init_state, P)
-    c(fastKLMatrix(init_state, state),fastKLVector(state,degree))
+    c(fastKLMatrix(init_state, state), fastKLVector(init_state, diag(P)))
   }) )
   score_df = cbind(score_df[1:nrow(init_state),],
                    score_df[(nrow(init_state)+1):nrow(score_df),])
-  colnames(score_df) = paste0(rep(c("score0_","score1_"), each = ncol(score_df)/2),
+  colnames(score_df) = paste0(rep(c("score0_","correction_"), each = ncol(score_df)/2),
                               colnames(score_df))
+  # Maximum value
   score_df = cbind(score_df,fastKLVector(init_state,degree))
-  colnames(score_df)[ncol(score_df)] = "score1_0"
-  score_df = score_df[,c(1:floor(ncol(score_df)/2),ncol(score_df),(floor(ncol(score_df)/2)+1):(ncol(score_df)-1))]
+  colnames(score_df)[ncol(score_df)] = "maximum_val"
   rownames(score_df) = rownames(init_state)
+
+  # Normalized the score profile
+  score_df = data.frame(score_df/score_df[,"maximum_val"])
   
+  # get LMDS
   sub_score0 = grep("score0",colnames(score_df))
-  sub_score1 = grep("score1_0",colnames(score_df))
-  score_df = data.frame(score_df[,sub_score0]/score_df[,sub_score1])
-  cumulative_score = rowSums(score_df)
-  
-  return(list(diffusion_KL_score = score_df,cumulative_score = cumulative_score))
+  sub_correction = grep("correction",colnames(score_df))
+  if(correction){
+    cumulative_score = rowSums(score_df[,sub_score0] - score_df[,sub_correction])
+  }else{
+    cumulative_score = rowSums(score_df[,sub_score0])
+  }
+
+  return(list(score_profile = score_df,cumulative_score = cumulative_score))
 }
-show_result_lmd <- function(res.lmd, n = 10){
+knee_point = function(Vecs){
+  Vecs = sort(Vecs)
+  # calculating the distance of each point on the curve from a line drawn from the first to the last point of the curve. The point with the maximum distance is typically considered the knee point.
+  curve_data = as.matrix(data.frame(x = 1:length(Vecs), y = Vecs))
+  line_start <- curve_data[1, ]
+  line_end <- curve_data[nrow(curve_data), ]
+  
+  dx <- line_end["x"] - line_start["x"]
+  dy <- line_end["y"] - line_start["y"]
+  norm_factor <- sqrt(dx^2 + dy^2)
+  A <- dy
+  B <- -dx
+  C <- dx * line_start["y"] - dy * line_start["x"]
+  distances <- abs(A * curve_data[, "x"] + B * curve_data[, "y"] + C) / norm_factor
+  knee_point = which.max(distances)
+  
+  plot(Vecs,pch = 20)
+  points(knee_point,Vecs[knee_point],col='red',pch = 20)
+  return(knee_point)
+}
+show_result_lmd <- function(res.lmd, n = length(res.lmd$cumulative_score)){
   score = res.lmd$cumulative_score
   score = sort(score)
   df = data.frame(score = score)
-  head(df,n = n)
+  df$'rank' = 1:nrow(df)
+  print(head(df,n = n))
+  gene_rank = setNames(df$'rank',rownames(df))
+  return(list(gene_table = df, gene_rank = gene_rank, cut_off_gene = gene_rank[1:knee_point(score)]))
 }
-LMD <- function(expression, feature_space, knn = 5, max_time = 2^10){
+LMD <- function(expression, feature_space, knn = 5, 
+                kernel = FALSE, max_time = 2^15, adjust_bridge = TRUE,
+                score_correction = TRUE){
   if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
-  W = Symmetric_KNN_graph(knn = knn, feature_space = feature_space)$'graph'
+  if(kernel){
+    W = Symmetric_gaussian_graph(knn = knn, feature_space = feature_space, alpha = 1, coef = 2, epsilon = 1e-3)$'graph'
+  }else{
+    W = Symmetric_KNN_graph(knn = knn, feature_space = feature_space, adjust_by_MST = adjust_bridge)$'graph'
+  }
   rho = Rowwise_normalize(expression)
-  res = fast_calculate_multi_score(W = W, init_state = rho, max_time = max_time)
+  res = fast_calculate_multi_score(W = W, max_time = max_time,
+                                   init_state = rho, correction = score_correction)
   return(res)
 }
 
@@ -300,7 +409,7 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
     check_time = c(0,check_time)
   }
   colnames(multi_state) = check_time
-  degree_node = rowSums(W) # Normalize multi_state with degree of node for visualization
+  # degree_node = rowSums(W) # Normalize multi_state with degree of node for visualization
   pl = lapply(seq(ncol(multi_state)),function(i){
     legend_break_label = seq(0, max(multi_state[,i]), length.out = 2)
     if(max(legend_break_label)>1e-3){
@@ -347,10 +456,10 @@ FeaturePlot_meta <- function(dat, coord, feature_partition){
   names(pl) = levels(feature_partition)
   return(pl)
 }
-Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, facet_class = NULL, add_point = NULL){
-  score_df = res.lmd$diffusion_KL_score
-  score_df["score0_0"] = 0
+Visualize_score_pattern <- function(score_profile, genes = NULL, label_class = NULL, facet_class = NULL, add_point = NULL){
+  score_df = score_profile
   if(!all(genes %in% rownames(score_df))){stop("Genes not found!")}
+  profiles = names(which(table(sub("_\\d+", "", colnames(score_df)))>1))
   score_df = score_df[genes,]
   score_df$'gene' = rownames(score_df)
   score_df$'label' = score_df$'gene'
@@ -373,9 +482,10 @@ Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, f
   }
 
   df <- reshape2::melt(score_df,
-                       id = colnames(score_df)[!grepl("score",colnames(score_df))],
+                       id = colnames(score_df)[!grepl(paste0(profiles,collapse = "|"),colnames(score_df))],
                        variable.name = c("step"), value.name = "score")
-  df$step = gsub("score0_","",df$step)
+  df$profiles = apply(do.call(cbind,lapply(profiles,function(p){ifelse(grepl(p,df$step),p,NA)})),1,function(x){x[!is.na(x)]})
+  df$step = sub(".*_([0-9]+).*", "\\1", df$step)
   x_breaks = unique(as.numeric(df$step))
   names(x_breaks) = pmax(log(x_breaks,base = 2),0)
   names(x_breaks) = ifelse(names(x_breaks) == "0",names(x_breaks),paste0("2^",names(x_breaks)))
@@ -384,13 +494,13 @@ Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, f
   levels(df$step) = x_breaks[levels(df$step)]
   
   if(!is.null(label_class)){
-    p = ggplot(data = df, mapping = aes(x = step, y = score, color = label)) + 
-      geom_line(aes(group = gene)) + labs(x = "Time", y = "Normalized Diffusion KL Score")  + 
-      geom_text(data = df %>% group_by(gene) %>% slice_head(n = 4) %>% slice_tail(n = 1),
+    p = ggplot(data = df, mapping = aes(x = step, y = score, color = label, linetype = profiles)) + 
+      geom_line(aes(group = interaction(gene,profiles))) + labs(x = "Time", y = "Normalized Diffusion KL Score")  + 
+      geom_text(data = df %>% group_by(interaction(gene,profiles)) %>% slice_head(n = 4) %>% slice_tail(n = 1),
                 aes(label = gene), hjust = 0) + theme(axis.text.x = element_text(angle = 45,hjust = 1))
   }else{
-    p = ggplot(data = df, mapping = aes(x = step, y = score, color = gene)) + 
-      geom_line(aes(group = gene)) + labs(x = "Time", y = "Normalized Diffusion KL Score")
+    p = ggplot(data = df, mapping = aes(x = step, y = score, color = gene, linetype = profiles)) + 
+      geom_line(aes(group = interaction(gene,profiles))) + labs(x = "Time", y = "Normalized Diffusion KL Score")
   }
   if(!is.null(add_point)){
     add_point = x_breaks[as.character(add_point)]
@@ -416,7 +526,8 @@ Visualize_score_pattern <- function(res.lmd, genes = NULL, label_class = NULL, f
     # panel.grid = element_blank(),
     # panel.background = element_blank(),
     axis.line = element_line(colour = "black")
-    )
+    ) 
+  # + ylim(0,1)
   return(p)
 }
 Visualize_jaccard_mtx <- function(jaccard_mtx){
@@ -538,5 +649,27 @@ GMM_subsampling <- function(seed, gene_partition, expr_dat, cell_kNN_graph, majo
   return(Obtain_cell_partition(expr_dat, gene_partition = sub_gene_partition, cell_kNN_graph, major_vote))
 }
 
+
+# Test Function =============
+quick_marker_benchmark <- function(gene_rank,tissue_name = "marrow_facs"){
+  folder_path = "/data/ruiqi/local_marker/LocalMarkerDetector/benchmark_result"
+  max_logfc = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c1.txt"))) %>% rownames()
+  celldb_marker = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c2.txt")))[,1]
+  gt_list = c(lapply(seq(50,1000,50),function(x) max_logfc[1:x]),list(celldb_marker))
+  names(gt_list) = c(paste0("Top",seq(50,1000,50)),"CellMarkerDB")
+  df_benchmark = data.frame(gene_rank,row.names = names(gene_rank))
+  
+  auc_vec = do.call(c,lapply(1:length(gt_list),function(i){
+    true_marker = gt_list[[i]]
+    df_benchmark$"gt" = 0
+    df_benchmark[true_marker,"gt"] = 1
+    
+    library(pROC)
+    roc = roc(df_benchmark$gt, df_benchmark[,1], direction = ">")
+    as.numeric(auc(roc))
+  }))
+  names(auc_vec) = names(gt_list)
+  return(auc_vec)
+}
 
 
