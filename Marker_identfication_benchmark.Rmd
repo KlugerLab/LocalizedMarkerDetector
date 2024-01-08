@@ -63,7 +63,6 @@ if(tissue_fullname == "Bone marrow"){
     download.file("https://datasets.cellxgene.cziscience.com/046d2e35-2ee6-4159-8db7-7b1039fe0005.rds",
                   destfile = 'Human_Thymic_Epithelial_seurat_tiss.Robj', method = 'libcurl')
   }
-  tiss <- readRDS()
 }
 
 tissue_fullname = "Bone marrow"
@@ -401,8 +400,6 @@ p = ggplot(roc_df, aes(x = FPR, y = TPR, color = label)) +
      y = "True Positive Rate") +  scale_colour_manual(values= coldef)
 ```
 
-
-
 # Density Index
 ```{r}
 df_benchmark = read.table(file.path(folder_path, paste0(tissue_name,"_benchmark_rank_table.csv")))
@@ -416,11 +413,11 @@ score_measure =do.call(rbind,lapply(c(method_ls,"All genes"),function(method){
     top_n = c(seq(50,90,10),seq(100,900,100),seq(1000,3000,500),seq(4000,9000,1000),seq(10000,max(df_benchmark),2000))
   }
   result = unlist(lapply(top_n, function(top){
-    tiss <- RunPCA(tiss, features = top_gs[1:top], npcs = 20)
-    d = dist(Embeddings(tiss, reduction = "pca"))
-    c = as.integer(factor(tiss$cell_ontology_class[labels(d)]))
-    
+    features = top_gs[1:top]
+    tiss <- tiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = 20)
     # # Silhouette score
+    # d = dist(Embeddings(tiss, reduction = "pca"))
+    # c = as.integer(factor(tiss$cell_ontology_class[labels(d)]))
     # s1 = mean(as.data.frame(cluster::silhouette(c, d)[,]) %>%
     #   group_by(cluster) %>%
     #   summarize(mean_silhouette = mean(sil_width)) %>%.$mean_silhouette)
@@ -428,7 +425,7 @@ score_measure =do.call(rbind,lapply(c(method_ls,"All genes"),function(method){
     # Density-index
     nn.dist = FNN::get.knn(Embeddings(tiss, reduction = "pca"), k = 10, algorithm = "kd_tree")$nn.dist
     sdVec <- stats::na.omit(tiss@reductions$pca@stdev)
-    length_scale <- sqrt(sum(sdVec^2))
+    length_scale <- sqrt(sum(sdVec^2)) # length-scale * sqrt(2*(N-1)/N) = d_rms
     s2 = length_scale/mean(nn.dist)
     
     s2
@@ -438,6 +435,28 @@ score_measure =do.call(rbind,lapply(c(method_ls,"All genes"),function(method){
   result = data.frame(TopGene = top_n,Method = method,DensityIndex = result)
 }) )
 
+# error bar & null distribution
+null_score_measure = do.call(rbind,lapply(top_n,function(top){
+  set.seed(top)
+  seed_ls = sample(1:1e5,size = 100)
+  random_top_gs = lapply(seed_ls,function(sed){
+    set.seed(sed)
+    sample(rownames(df_benchmark),top,replace = FALSE)
+  })
+  result = unlist(lapply(random_top_gs, function(g_ls){
+    features = g_ls
+    tiss <- tiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = 20)
+    # Density-index
+    nn.dist = FNN::get.knn(Embeddings(tiss, reduction = "pca"), k = 10, algorithm = "kd_tree")$nn.dist
+    sdVec <- stats::na.omit(tiss@reductions$pca@stdev)
+    length_scale <- sqrt(sum(sdVec^2))
+    s2 = length_scale/mean(nn.dist)
+    s2
+  }))
+  result = data.frame(TopGene = top,DensityIndex = result)
+}) )
+
+write.table(null_score_measure,file = file.path(folder_path, paste0(tissue_name,"_DI_null.csv")),row.names = FALSE)
 write.table(score_measure,file = file.path(folder_path, paste0(tissue_name,"_density_index.csv")),row.names = FALSE)
 ```
 

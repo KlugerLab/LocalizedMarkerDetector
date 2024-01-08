@@ -49,7 +49,7 @@ W = res$graph # Symmetrized Graph ((A + AT) / 2)
 
 P_ls = Obtain_Pls(W = W, max_time = 2^15)
 rho = Rowwise_normalize(dat[,colnames(W)])
-res = fast_calculate_multi_score(W = W, init_state = rho, P_ls = P_ls)
+res = fast_get_lmds(W = W, init_state = rho, P_ls = P_ls)
 ```
 ```{r}
 # Plot knn graph
@@ -348,6 +348,10 @@ fig = ggplot(score_measure %>% filter(Method!="All genes") %>% filter(TopGene >=
     panel.background = element_blank(),
     axis.line = element_line(colour = "black"))
   # geom_text_repel(data = score_measure %>%  filter(Method!="all genes") %>% group_by(Method) %>% slice_head(n = 2) %>% slice_tail(n = 1), aes(label = Method), hjust = 0)
+
+# # Add null distribution
+# null_score_measure = read.csv(paste0(path,tissue_name,"_DI_null.csv"),header = TRUE)
+# fig = fig + geom_boxplot(data = null_score_measure, aes(x = TopGene, y = DensityIndex, group = TopGene), inherit.aes = FALSE)
 
 ggsave(filename = "fig-densityindex.png", plot = fig, width = 5, height = 5)
 ```

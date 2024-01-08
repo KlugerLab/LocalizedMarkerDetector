@@ -1,7 +1,8 @@
 cran_packages <- c("igraph","ggplot2", "cowplot", "RColorBrewer", 
                    "data.table", "dplyr", "patchwork", 
                    "pheatmap", "ggplotify", "ggraph", 
-                   "ClusterR", "Rcpp", "RcppArmadillo", "tictoc","RSpectra")
+                   "ClusterR", "Rcpp", "RcppArmadillo", 
+                   "tictoc","svMisc","RSpectra")
 sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 lapply(cran_packages, require, character.only = TRUE)
 
@@ -111,7 +112,7 @@ findShortestEdge <- function(component1, component2, data) {
   return(c(component1[min_distance_idx[1]], component2[min_distance_idx[2]]))
 }
 
-Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE){
+Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, self_loop = TRUE){
   knn_list <- FNN::get.knn(feature_space, k = knn, algorithm = "kd_tree")
   Idx = knn_list$nn.index
   A = Matrix::sparseMatrix(i = rep(1:nrow(Idx),each = knn),
@@ -145,7 +146,7 @@ Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE){
     }
   }
   
-  # if(adjust){
+  # if(adjust){ # increase knn if containing disconnected components
   #   while(length(filtered_components) >= 2){
   #     knn = knn + 1
   #     knn_list <- FNN::get.knn(feature_space, k = knn, algorithm = "kd_tree")
@@ -164,10 +165,13 @@ Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE){
   # }
   
   if (length(filtered_components) >= 2) {
-    stop("Disconnected Components, Please increase knn.")
+    stop("Disconnected Components, Please increase knn or adjust by MST.")
   }
 
   A = as.matrix(A)
+  if(self_loop){
+    diag(A) = 1
+  }
   
   # Graph affinity matrix by symmetrize the adjacency mtx
   # W = (A + t(A))/2 # weighted
@@ -175,7 +179,8 @@ Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE){
 
   return(list(graph = W,adj_matrix = A, component = filtered_components))
 }
-Symmetric_gaussian_graph <- function(knn = 5, feature_space, alpha = 1, coef = 2, epsilon = 1e-3){
+
+Symmetric_gaussian_graph <- function(knn = 5, feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = TRUE){
   node_num = nrow(feature_space)
   knn_list <- FNN::get.knn(feature_space, k = node_num - 1, algorithm = "kd_tree")
   Idx = knn_list$nn.index
@@ -193,6 +198,9 @@ Symmetric_gaussian_graph <- function(knn = 5, feature_space, alpha = 1, coef = 2
                            x = c(t(knn_dist)))
   rownames(A) = colnames(A) = rownames(feature_space)
   A = as.matrix(A)
+  if(self_loop){
+    diag(A) = 1
+  }
 
   # Graph affinity matrix (by default graph is connected)
   W = (A + t(A))/2
@@ -200,22 +208,34 @@ Symmetric_gaussian_graph <- function(knn = 5, feature_space, alpha = 1, coef = 2
 
   return(list(graph = W,adj_matrix = A))
 }
+
 Obtain_Pls <- function(W, max_time){
+  cat("Create a list of diffusion operator\n")
+  pb <- txtProgressBar(min = 0, max = 100, style = 3)
   P = Doubly_stochastic(W)
+  setTxtProgressBar(pb, 10)
   # P = Rowwise_normalize(W)
   # eig_res = RSpectra::eigs_sym(P, k = 1, which = "LM")
   max_step = max_time
   P_ls = NULL
   if(max_step < 1){
-    print("no propogation")
+    stop("Incorrect diffusion time, no propogation")
   }else{
     t = 1
-    while(t <= floor(log(max_step,2))){
+    # automatic decide max_step by checking whether the diag of P -> 1/n
+    while(t <= floor(log(max_step,2)) & 
+          max(abs((ncol(P) * diag(P)) * ncol(P) - ncol(P))) >= 1e-2 * ncol(P)){
       P = P %*% P; t = t + 1
       P_ls = c(P_ls,list(P))
+      setTxtProgressBar(pb, 10 * (t + 1))
     }
+    setTxtProgressBar(pb, 100)
   }
-  names(P_ls) = 2^seq(1,floor(log(max_step,2)))
+  names(P_ls) = 2^seq(1,t-1)
+  # Add t = 0
+  P_ls = c(list(diag(nrow(W))),P_ls) 
+  names(P_ls)[1] = "0"
+  cat("\nmax diffusion time:",2^(t-1))
   return(P_ls)
 }
 plot_knn_graph <- function(affinity_m, label = NULL, layout){
@@ -249,33 +269,31 @@ plot_knn_graph <- function(affinity_m, label = NULL, layout){
 }
 
 # Calculating Diffusion score =========
-fast_calculate_multi_score <- function(W, max_time = 2^15, init_state, P_ls = NULL, correction = TRUE){
+fast_calculate_score_profile <- function(W, max_time = 2^15, init_state, P_ls = NULL){
   if((ncol(W) != ncol(init_state)) & (ncol(W) == nrow(init_state))){
     init_state = t(init_state)
   }
   if(ncol(W) != ncol(init_state)){
     stop("Check the dimension!")
   }
-  # degree = rowSums(W)/sum(rowSums(W)) # row-stochastic
-  degree = rep(1/nrow(W),nrow(W)) # bi-stochastic
+  # final_state = rowSums(W)/sum(rowSums(W)) # row-stochastic
+  final_state = rep(1/nrow(W),nrow(W)) # bi-stochastic
 
   # Calculate transition matrix
   if(is.null(P_ls)){
     P_ls = Obtain_Pls(W,max_time)
   }
-  P_ls = c(list(diag(nrow(W))),P_ls) # Add t = 0
-  names(P_ls)[1] = "0"
 
   # # Calculate multi-scale KL divergence
   # score_df = do.call(cbind,lapply(P_ls,function(P){
   #   state = fastMatMult(init_state, P)
-  #   c(fastKLMatrix(init_state, state),fastKLVector(state,degree))
+  #   c(fastKLMatrix(init_state, state),fastKLVector(state,final_state))
   # }) )
   # score_df = cbind(score_df[1:nrow(init_state),],
   #                  score_df[(nrow(init_state)+1):nrow(score_df),])
   # colnames(score_df) = paste0(rep(c("score0_","score1_"), each = ncol(score_df)/2),
   #                             colnames(score_df))
-  # score_df = cbind(score_df,fastKLVector(init_state,degree))
+  # score_df = cbind(score_df,fastKLVector(init_state,final_state))
   # colnames(score_df)[ncol(score_df)] = "score1_0"
   # score_df = score_df[,c(1:floor(ncol(score_df)/2),ncol(score_df),(floor(ncol(score_df)/2)+1):(ncol(score_df)-1))]
   # rownames(score_df) = rownames(init_state)
@@ -293,25 +311,43 @@ fast_calculate_multi_score <- function(W, max_time = 2^15, init_state, P_ls = NU
                    score_df[(nrow(init_state)+1):nrow(score_df),])
   colnames(score_df) = paste0(rep(c("score0_","correction_"), each = ncol(score_df)/2),
                               colnames(score_df))
-  # Maximum value
-  score_df = cbind(score_df,fastKLVector(init_state,degree))
-  colnames(score_df)[ncol(score_df)] = "maximum_val"
   rownames(score_df) = rownames(init_state)
-
-  # Normalized the score profile
-  score_df = data.frame(score_df/score_df[,"maximum_val"])
+  score_df = data.frame(score_df)
   
-  # get LMDS
-  sub_score0 = grep("score0",colnames(score_df))
-  sub_correction = grep("correction",colnames(score_df))
-  if(correction){
-    cumulative_score = rowSums(score_df[,sub_score0] - score_df[,sub_correction])
-  }else{
-    cumulative_score = rowSums(score_df[,sub_score0])
-  }
-
-  return(list(score_profile = score_df,cumulative_score = cumulative_score))
+  # Add scale_factor
+  ## Maximum value
+  score_df[,"maximum_val"] = fastKLVector(init_state,final_state)
+  ## Entropy
+  score_df[,"entropy"] = -score_df[,"correction_0"]
+  
+  return(score_df)
 }
+obtain_lmds = function(score_profile, correction){
+  # get LMDS
+  sub_score0 = grep("score0",colnames(score_profile))
+  sub_correction = grep("correction",colnames(score_profile))
+  if(!correction){
+    # raw LMDS
+    # Scale the score profile by maximum value
+    df = score_profile/score_profile[,"maximum_val"]
+    cumulative_score = rowSums(df[,sub_score0])
+  }else{
+    # adjusted LMDS
+    # Scale the score profile by entropy
+    df = score_profile/score_profile[,"entropy"]
+    cumulative_score = rowSums(df[,sub_score0] - df[,sub_correction])
+  }
+  return(cumulative_score)
+}
+
+# combine fast_calculate_score_profile & obtain_lmds in one step
+fast_get_lmds <- function(W, max_time = 2^15, init_state, P_ls = NULL, correction = FALSE){
+  score_profile = fast_calculate_score_profile(W = W, max_time = max_time, 
+                                               init_state = init_state, P_ls = P_ls)
+  cumulative_score = obtain_lmds(score_profile = score_profile, correction = correction)
+  return(list(score_profile = score_profile,cumulative_score = cumulative_score))
+}
+
 knee_point = function(Vecs){
   Vecs = sort(Vecs)
   # calculating the distance of each point on the curve from a line drawn from the first to the last point of the curve. The point with the maximum distance is typically considered the knee point.
@@ -332,6 +368,20 @@ knee_point = function(Vecs){
   points(knee_point,Vecs[knee_point],col='red',pch = 20)
   return(knee_point)
 }
+LMD <- function(expression, feature_space, knn = 5, 
+                kernel = FALSE, max_time = 2^15, adjust_bridge = TRUE, self_loop = TRUE,
+                score_correction = FALSE){
+  if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
+  if(kernel){
+    W = Symmetric_gaussian_graph(knn = knn, feature_space = feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = self_loop)$'graph'
+  }else{
+    W = Symmetric_KNN_graph(knn = knn, feature_space = feature_space, adjust_by_MST = adjust_bridge, self_loop = self_loop)$'graph'
+  }
+  rho = Rowwise_normalize(expression)
+  res = fast_get_lmds(W = W, max_time = max_time,
+                                   init_state = rho, correction = score_correction)
+  return(res)
+}
 show_result_lmd <- function(res.lmd, n = length(res.lmd$cumulative_score)){
   score = res.lmd$cumulative_score
   score = sort(score)
@@ -340,20 +390,6 @@ show_result_lmd <- function(res.lmd, n = length(res.lmd$cumulative_score)){
   print(head(df,n = n))
   gene_rank = setNames(df$'rank',rownames(df))
   return(list(gene_table = df, gene_rank = gene_rank, cut_off_gene = gene_rank[1:knee_point(score)]))
-}
-LMD <- function(expression, feature_space, knn = 5, 
-                kernel = FALSE, max_time = 2^15, adjust_bridge = TRUE,
-                score_correction = TRUE){
-  if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
-  if(kernel){
-    W = Symmetric_gaussian_graph(knn = knn, feature_space = feature_space, alpha = 1, coef = 2, epsilon = 1e-3)$'graph'
-  }else{
-    W = Symmetric_KNN_graph(knn = knn, feature_space = feature_space, adjust_by_MST = adjust_bridge)$'graph'
-  }
-  rho = Rowwise_normalize(expression)
-  res = fast_calculate_multi_score(W = W, max_time = max_time,
-                                   init_state = rho, correction = score_correction)
-  return(res)
 }
 
 # Visualization =========
@@ -395,19 +431,18 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
   if(ncol(init_state)!=graph_node_number | nrow(init_state)!=1){stop("Unmatched dimension")}
   check_step = sort(unique(floor(log(check_time,base = 2))))
   check_step = check_step[check_step >= 1]
-  include_init = FALSE
+  
   if(0 %in% check_time){
-    include_init = TRUE
+    check_time = c(0,2^check_step)
+  }else{
+    check_time = 2^check_step
   }
-  check_time = 2^check_step
   if(is.null(P_ls)){P_ls = Obtain_Pls(W,max(check_time))}
-  multi_state = sapply(P_ls[check_step],function(P){
+  sub = match(check_time,names(P_ls))
+  multi_state = sapply(P_ls[sub],function(P){
     state = fastMatMult(init_state, P)
   })
-  if(include_init){
-    multi_state = cbind(t(init_state),multi_state)
-    check_time = c(0,check_time)
-  }
+  
   colnames(multi_state) = check_time
   # degree_node = rowSums(W) # Normalize multi_state with degree of node for visualization
   pl = lapply(seq(ncol(multi_state)),function(i){
