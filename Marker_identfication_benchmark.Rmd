@@ -14,12 +14,14 @@ if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
 
 library("Seurat")
 library("dplyr")
+library(RColorBrewer)
 ```
 
 # Load Data & Process
 ## Load Data
 ```{r}
 # tiss <- readRDS("/data/ruiqi/local_marker/dataset/tabular_muris/marrow_facs.rds")
+# DefaultAssay(tiss) <- "RNA"
 ```
 
 ```{r}
@@ -35,7 +37,8 @@ if(tissue_fullname == "Bone marrow"){
   }
   load('facs_Marrow_seurat_tiss.Robj')
   tiss <- UpdateSeuratObject(tiss)
-}if(tissue_fullname == "Pancreas"){
+}
+if(tissue_fullname == "Pancreas"){
   tissue_name = "pancreas_facs"
   if (!file.exists('facs_Pancreas_seurat_tiss.Robj')) {
      # If load url doesn't work, please download it and load from your working directory
@@ -45,7 +48,8 @@ if(tissue_fullname == "Bone marrow"){
   }
   load('facs_Pancreas_seurat_tiss.Robj')
   tiss <- UpdateSeuratObject(tiss)
-}if(tissue_fullname == "Lung"){
+}
+if(tissue_fullname == "Lung"){
   tissue_name = "lung_facs"
   if (!file.exists('facs_Lung_seurat_tiss.Robj')) {
      # If load url doesn't work, please download it and load from your working directory
@@ -55,7 +59,8 @@ if(tissue_fullname == "Bone marrow"){
    }
   load('facs_Lung_seurat_tiss.Robj')
   tiss <- UpdateSeuratObject(tiss)
-}if(tissue_fullname == "Thymic"){
+}
+if(tissue_fullname == "Thymic"){
   options(timeout=6000)
   if (!file.exists('Human_Thymic_Epithelial_seurat_tiss.Robj')) {
      # If load url doesn't work, please download it and load from your working directory
@@ -63,18 +68,16 @@ if(tissue_fullname == "Bone marrow"){
     download.file("https://datasets.cellxgene.cziscience.com/046d2e35-2ee6-4159-8db7-7b1039fe0005.rds",
                   destfile = 'Human_Thymic_Epithelial_seurat_tiss.Robj', method = 'libcurl')
   }
+  load('Human_Thymic_Epithelial_seurat_tiss.Robj')
 }
-
-tissue_fullname = "Bone marrow"
 ```
+
 ## Process
 ```{r}
 DefaultAssay(tiss) <- "RNA"
-n_dim = dim(tiss@reductions$pca@cell.embeddings)[2]
+n_dim = pmin(dim(tiss@reductions$pca@cell.embeddings)[2],30)
 feature_space = as.matrix(tiss@reductions$pca@cell.embeddings[,1:n_dim])
-visual_space = data.frame(tiss@reductions$tsne@cell.embeddings)
 dat = as.matrix(tiss[[DefaultAssay(tiss)]]@data)
-cell_label = tiss$cell_ontology_class
 
 Gene_detected_count <- apply(dat > apply(dat,2,median),1,sum)
 selected_genes = (Gene_detected_count >= 10) & (Gene_detected_count <= ncol(dat) * 0.5)
@@ -93,7 +96,6 @@ folder_path = "benchmark_result"
 if (!dir.exists(folder_path)) {
   # If it doesn't exist, create it
   dir.create(folder_path)
-} else {
 }
 ```
 
@@ -141,7 +143,7 @@ Genes were ranked by the increasing order of Cumulative Diffusion-KL score
 ```{r}
 method = "lmd"
 source("LMD_function.R", echo = F)
-res = LMD(dat,feature_space,max_time = 2^10,knn = 5)
+res = LMD(dat,feature_space,max_time = 2^20,knn = 5)
 marker = show_result_lmd(res, n = length(selected_genes))
 marker[order(marker$score),'rank'] = 1:nrow(marker)
 write.table(marker,file = file.path(folder_path, paste0(method,"_",tissue_name,".csv")),row.names = TRUE)
@@ -153,8 +155,13 @@ Genes were ranked by their lowest adjusted P-value in any cluster (increasing or
 tiss <- FindNeighbors(tiss, dims = 1:n_dim)
 tiss <- FindClusters(tiss, resolution = 1.5, algorithm = 3)
 method = "wilcox_no_filter"
-marker <- FindAllMarkers(tiss, features = selected_genes, only.pos = FALSE, test.use = "wilcox", logfc.threshold = 0, min.pct = 0)
-gene_rank = marker %>% arrange(.,p_val_adj,desc(avg_log2FC)) %>% distinct(.,gene, .keep_all = TRUE) %>% select(gene)
+# marker <- FindAllMarkers(tiss, features = selected_genes, only.pos = FALSE, test.use = "wilcox", logfc.threshold = 0, min.pct = 0)
+# gene_rank = marker %>% arrange(.,p_val_adj,desc(avg_log2FC)) %>% distinct(.,gene, .keep_all = TRUE) %>% select(gene)
+marker <- presto:::wilcoxauc.Seurat(X = subset(tiss,features = selected_genes),
+                                    assay = "data", 
+                                    seurat_assay = "RNA")
+colnames(marker)[1] = "gene"
+gene_rank = marker %>% arrange(.,padj,desc(logFC)) %>% distinct(.,gene, .keep_all = TRUE) %>% select(gene)
 gene_rank$'rank' = 1:nrow(gene_rank)
 marker <- merge(marker,gene_rank,by = "gene")
 write.table(marker,file = file.path(folder_path, paste0(method,"_",tissue_name,".csv")),row.names = TRUE)
@@ -287,6 +294,19 @@ write.table(marker,file = file.path(folder_path, paste0(method,"_",tissue_name,"
 ```
 
 ## Marcopolo
+Long Runtime Option
+```{r}
+# transfer the seurat obj to h5ad & process in jupyter notebook
+library(reticulate)
+library(anndata)
+sc <- import("scanpy", convert = FALSE)
+scvi <- import("scvi", convert = FALSE)
+# scvi$settings$progress_bar_style = 'tqdm'
+tiss_adata <- sc$AnnData(
+  X = t(raw_count)
+)
+anndata::write_h5ad(tiss_adata, "./dataset/tm_marrow.h5ad")
+```
 The rank of genes is given by `Marcopolo_rank`
 ```{python}
 import pickle
@@ -309,6 +329,7 @@ regression_result = MarcoPolo.run_regression(adata=adata, size_factor_key="size_
                          num_threads=1, device="cpu")
 
 result = MarcoPolo.find_markers(adata=adata, regression_result=regression_result)
+result = result.set_axis(list(adata.var.index) ,axis = 0)
 ```
 ```{r}
 method = "marcopolo"
@@ -333,27 +354,29 @@ write.table(marker,file = file.path(folder_path, paste0(method,"_",tissue_name,"
 # Integrate rank from all methods into one dataframe
 ```{r}
 method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg")
-
-df_benchmark = do.call(cbind,lapply(method_ls, function(method){
+df_benchmark = lapply(method_ls, function(method){
   marker = read.table(file.path(folder_path, paste0(method,"_",tissue_name,".csv")),header = TRUE)
-  if("gene" %in% colnames(marker)){
-    return(marker$rank[match(selected_genes,marker$gene)])
-  }else{
-    return(marker$rank[match(selected_genes,rownames(marker))])
+  if(!"gene" %in% colnames(marker)){
+    marker$'gene' = rownames(marker)
   }
-}))
+  marker %>% select(gene,rank) %>% distinct()
+})
+names(df_benchmark) = method_ls
+df_benchmark = bind_rows(df_benchmark, .id = "method")
+df_benchmark <- tidyr::pivot_wider(df_benchmark, names_from = method, values_from = rank)
 df_benchmark[is.na(df_benchmark)] = nrow(df_benchmark)
-df_benchmark = data.frame(df_benchmark,row.names = selected_genes)
-colnames(df_benchmark) = method_ls
 
-write.table(df_benchmark,file = file.path(folder_path, paste0(tissue_name,"_benchmark_rank_table.csv")),row.names = TRUE)
+# rownames(df_benchmark) = df_benchmark$gene
+# df_benchmark[order(Gene_detected_count[rownames(df_benchmark)]),"gene_count"] = 1:nrow(df_benchmark)
+
+write.table(df_benchmark,file = file.path(folder_path, paste0(tissue_name,"_benchmark_rank_table.csv")),row.names = FALSE)
 ```
 
 # AUROC
 ```{r}
 df_benchmark = read.table(file.path(folder_path, paste0(tissue_name,"_benchmark_rank_table.csv")))
 
-method_ls = c("lmd","lmd_gaussian","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg")
+method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg")
 ```
 ```{r}
 max_logfc = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c1.txt"))) %>% rownames()
@@ -402,29 +425,32 @@ p = ggplot(roc_df, aes(x = FPR, y = TPR, color = label)) +
 
 # Density Index
 ```{r}
+folder_path = "benchmark_result"
 df_benchmark = read.table(file.path(folder_path, paste0(tissue_name,"_benchmark_rank_table.csv")))
-
-score_measure =do.call(rbind,lapply(c(method_ls,"All genes"),function(method){
+score_measure =do.call(rbind,lapply(c(colnames(df_benchmark),"All genes"),function(method){
   if(method == "All genes"){
     top_gs = rownames(df_benchmark)
     top_n = length(top_gs)
   }else{
     top_gs = rownames(df_benchmark)[order(df_benchmark[,method])]
-    top_n = c(seq(50,90,10),seq(100,900,100),seq(1000,3000,500),seq(4000,9000,1000),seq(10000,max(df_benchmark),2000))
+    # top_n = c(seq(50,90,10),seq(100,900,100),seq(1000,3000,500),seq(4000,9000,1000),seq(10000,max(df_benchmark),2000))
+    top_n = c(seq(50,90,10),seq(100,1000,100))
   }
-  result = unlist(lapply(top_n, function(top){
+  DI = unlist(lapply(top_n, function(top){
     features = top_gs[1:top]
-    tiss <- tiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = 20)
+    # remove drop-out cells
+    subtiss = subset(tiss, cells = which(colSums(subset(tiss,features = features))>0))
+    subtiss <- subtiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = 20)
     # # Silhouette score
-    # d = dist(Embeddings(tiss, reduction = "pca"))
-    # c = as.integer(factor(tiss$cell_ontology_class[labels(d)]))
+    # d = dist(Embeddings(subtiss, reduction = "pca"))
+    # c = as.integer(factor(subtiss$cell_ontology_class[labels(d)]))
     # s1 = mean(as.data.frame(cluster::silhouette(c, d)[,]) %>%
     #   group_by(cluster) %>%
     #   summarize(mean_silhouette = mean(sil_width)) %>%.$mean_silhouette)
     
     # Density-index
-    nn.dist = FNN::get.knn(Embeddings(tiss, reduction = "pca"), k = 10, algorithm = "kd_tree")$nn.dist
-    sdVec <- stats::na.omit(tiss@reductions$pca@stdev)
+    nn.dist = FNN::get.knn(Embeddings(subtiss, reduction = "pca"), k = 10, algorithm = "kd_tree")$nn.dist
+    sdVec <- stats::na.omit(subtiss@reductions$pca@stdev)
     length_scale <- sqrt(sum(sdVec^2)) # length-scale * sqrt(2*(N-1)/N) = d_rms
     s2 = length_scale/mean(nn.dist)
     
@@ -432,10 +458,23 @@ score_measure =do.call(rbind,lapply(c(method_ls,"All genes"),function(method){
     
   }))
   # rownames(result) = c("Mean_SI","DI")
-  result = data.frame(TopGene = top_n,Method = method,DensityIndex = result)
+  
+  # Non-dropout Rate
+  cell_count = lapply(top_n,function(n){
+    colSums(dat[top_gs[1:n],]>0)
+  })
+  non_dropout_rate = unlist(lapply(cell_count,function(x){
+    sum(x != 0)/length(x)
+  }))
+  
+  result = data.frame(TopGene = top_n,Method = method,DensityIndex = DI, non_dropout_rate = non_dropout_rate)
+  result
 }) )
 
+write.table(score_measure,file = file.path(folder_path, paste0(tissue_name,"_density_index_no_dropout.csv")),row.names = FALSE)
+
 # error bar & null distribution
+top_n = c(seq(50,90,10),seq(100,900,100),seq(1000,3000,500),seq(4000,9000,1000),seq(10000,max(df_benchmark),2000))
 null_score_measure = do.call(rbind,lapply(top_n,function(top){
   set.seed(top)
   seed_ls = sample(1:1e5,size = 100)
@@ -445,19 +484,134 @@ null_score_measure = do.call(rbind,lapply(top_n,function(top){
   })
   result = unlist(lapply(random_top_gs, function(g_ls){
     features = g_ls
-    tiss <- tiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = 20)
+    subtiss = subset(tiss, cells = which(colSums(subset(tiss,features = features))>0))
+    subtiss <- subtiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = 20)
     # Density-index
-    nn.dist = FNN::get.knn(Embeddings(tiss, reduction = "pca"), k = 10, algorithm = "kd_tree")$nn.dist
-    sdVec <- stats::na.omit(tiss@reductions$pca@stdev)
+    nn.dist = FNN::get.knn(Embeddings(subtiss, reduction = "pca"), k = 10, algorithm = "kd_tree")$nn.dist
+    sdVec <- stats::na.omit(subtiss@reductions$pca@stdev)
     length_scale <- sqrt(sum(sdVec^2))
     s2 = length_scale/mean(nn.dist)
     s2
   }))
   result = data.frame(TopGene = top,DensityIndex = result)
 }) )
-
 write.table(null_score_measure,file = file.path(folder_path, paste0(tissue_name,"_DI_null.csv")),row.names = FALSE)
-write.table(score_measure,file = file.path(folder_path, paste0(tissue_name,"_density_index.csv")),row.names = FALSE)
+
+# smallest set of genes covering 95% cells & corresponding DI
+min_coverage = 1
+coverage_score_measure = do.call(rbind,lapply(colnames(df_benchmark),function(method){
+  cat(method,"\n")
+  top_gs = rownames(df_benchmark)[order(df_benchmark[,method])]
+  min_covered = apply(dat[top_gs,] > 0, 2, function(x) which(x)[min_coverage])
+  min_row_for_coverage <- as.integer(names(which(cumsum(table(min_covered)) >= ncol(dat) * 0.95)[1]))
+  features = top_gs[1:min_row_for_coverage]
+  
+  # remove drop-out cells
+  subtiss = subset(tiss, cells = which(colSums(subset(tiss,features = features))>0))
+  npcs = pmin(20,length(features))
+  subtiss <- subtiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = npcs, verbose = FALSE)
+  subtiss <- RunUMAP(subtiss,dims = 1:dim(subtiss@reductions$pca)[2])
+  # Density-index
+  if(length(features) < npcs){
+    nn.dist = FNN::get.knn(t(subtiss[["RNA"]]@scale.data), k = 10, algorithm = "kd_tree")$nn.dist
+    length_scale <- norm(t(subtiss[["RNA"]]@scale.data),type = "F")/sqrt(ncol(subtiss)-1)
+    s2 = length_scale/mean(nn.dist)
+  }else{
+    nn.dist = FNN::get.knn(Embeddings(subtiss, reduction = "pca"), k = 10, algorithm = "kd_tree")$nn.dist
+    sdVec <- stats::na.omit(subtiss@reductions$pca@stdev)
+    length_scale <- sqrt(sum(sdVec^2)) # length-scale * sqrt(2*(N-1)/N) = d_rms
+    s2 = length_scale/mean(nn.dist)
+  }
+  
+  data.frame(TopGene = min_row_for_coverage,Method = method,DensityIndex = s2, non_dropout_rate = sum(colSums(dat[features,]>0)!=0)/ncol(dat))
+  
+  DimPlot(subtiss,group.by = "cell_ontology_class") + NoLegend() + ggtitle(sprintf("%s, %d genes, DI: %.4f",method,min_row_for_coverage,s2))
+}))
+
+```
+
+# NNret + Silhouette + DI
+```{r}
+folder_path = "benchmark_result"
+df_benchmark = read.table(file.path(folder_path, paste0(tissue_name,"_benchmark_rank_table.csv")))
+score_measure =do.call(rbind,lapply(c(colnames(df_benchmark),"All genes"),function(method){
+  if(method == "All genes"){
+    top_gs = rownames(df_benchmark)
+    top_n = length(top_gs)
+  }else{
+    top_gs = rownames(df_benchmark)[order(df_benchmark[,method])]
+    top_n = c(seq(50,90,10),seq(100,1000,100))
+  }
+  scores = sapply(top_n, function(top){
+    features = top_gs[1:top]
+    # remove drop-out cells
+    subtiss = subset(tiss, cells = which(colSums(subset(tiss,features = features))>0))
+    subtiss <- subtiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = 20)
+    
+    # Silhouette score
+    d = dist(Embeddings(subtiss, reduction = "pca"))
+    c = as.integer(factor(subtiss$celltype[labels(d)]))
+    si = mean(as.data.frame(cluster::silhouette(c, d)[,]) %>%
+      group_by(cluster) %>%
+      summarize(mean_silhouette = mean(sil_width)) %>%.$mean_silhouette)
+    
+    # NNret
+    nn.result = FNN::get.knn(Embeddings(subtiss, reduction = "pca"), k = 10, algorithm = "kd_tree")
+    nn.dist = nn.result$nn.dist
+    nn.index = nn.result$nn.index
+    nnret = mean(
+      unlist(lapply(1:nrow(nn.index),function(i){
+      mean(c[nn.index[i,]] == c[i])
+    })) )
+    
+    # Density-index
+    sdVec <- stats::na.omit(subtiss@reductions$pca@stdev)
+    length_scale <- sqrt(sum(sdVec^2)) # length-scale * sqrt(2*(N-1)/N) = d_rms
+    di = length_scale/mean(nn.dist)
+    
+    c(si,di,nnret)
+  }) 
+  scores = t(scores)
+  colnames(scores) = c("Sihouette_score","DensityIndex","NNret")
+  rownames(scores) = top_n
+  
+  # Non-dropout Rate
+  cell_count = lapply(top_n,function(n){
+    colSums(tiss[["RNA"]]@data[top_gs[1:n],]>0)
+  })
+  non_dropout_rate = unlist(lapply(cell_count,function(x){
+    sum(x != 0)/length(x)
+  }))
+  
+  result = data.frame(TopGene = top_n,Method = method, scores, non_dropout_rate = non_dropout_rate)
+  result
+}) )
+```
+
+# Recovery of celltypes
+```{r}
+# jaccard index of cell-type-specificity of each genes
+cell_label = tiss$celltype
+one_hot_matrix_ct <- sapply(unique(cell_label), function(x) as.integer(cell_label == x))
+binary_dat = dat > apply(dat,2,median)
+intersect_mtx = binary_dat %*% one_hot_matrix_ct
+union_mtx = sapply(colnames(one_hot_matrix_ct),function(ct){
+  rowSums((binary_dat > 0)) + colSums(one_hot_matrix_ct)[ct]
+}) - intersect_mtx
+jaccard_sim = intersect_mtx / union_mtx
+threshold = 0.8 / ((ncol(tiss)/table(cell_label))*0.2 + 0.8)[colnames(jaccard_sim)]
+recovery_mtx = t(apply(jaccard_sim,1,function(x) x > threshold))
+
+# Prop of recovered cell types
+recovery_rate =data.frame(sapply(c(colnames(df_benchmark)),function(method){
+  top_gs = rownames(df_benchmark)[order(df_benchmark[,method])]
+  top_n = 1:300
+  scores = sapply(top_n, function(top){
+    features = top_gs[1:top]
+    mean(colSums(recovery_mtx[features,,drop = FALSE]) > 0)
+  }) 
+}) )
+recovery_rate$'TopGene' = 1:nrow(recovery_rate)
 ```
 
 # Sensitivity Test (Try different K)

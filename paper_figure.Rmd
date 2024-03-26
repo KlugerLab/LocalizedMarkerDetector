@@ -69,7 +69,7 @@ ggsave(filename = "fig-pipeline2.png", plot = p, width = 10, height = 5)
 # Check Gene Diffusion on Cell graph by time
 pl = lapply(1:length(genes),function(i){
   gene = genes[i]
-  FeaturePlot_diffusion(coord = visual_space,init_state = rho[gene,],P_ls = P_ls,W = W,check_time = check_time,gene_name = NULL, gene_color = scales::hue_pal()(2)[i])
+  FeaturePlot_diffusion(coord = visual_space,init_state = rho[gene,],P_ls = P_ls,W = W,check_time = check_time,gene_name = NULL, gene_color = scales::hue_pal()(length(genes))[i])
 })
 p = as.ggplot(pl[[1]]) / as.ggplot(pl[[2]] & labs(title = NULL))
 ggsave(filename = "fig-pipeline3.png", plot = p, width = 16, height = 8)
@@ -82,18 +82,18 @@ library("dplyr")
 library("ggplot2")
 
 # Set the color code for all methods
-method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg")
-method_fullname = setNames(c("LMD","singleCellHaystack","Hotspot","Marcopolo","SEMITONES","Seurat v4 default", "Seurat v4 Wilcoxon unfiltered","HVGs"),method_ls)
+method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_default","wilcox_no_filter","hvg","gene_count")
+method_fullname = setNames(c("LMD","singleCellHaystack","Hotspot","Marcopolo","SEMITONES","Seurat v4 default", "Seurat v4 Wilcoxon unfiltered","HVGs","Gene count"),method_ls)
 coldef = setNames(
   colorRampPalette(brewer.pal(9, "Set1"))(length(method_fullname)),
   method_fullname)
 ```
 ```{r}
-path = "./benchmark_result/"
+folder_path = "./benchmark_result/"
 tissue_ls = c("marrow_facs","pancreas_facs","lung_facs")
-df_auc = do.call(rbind,lapply(tissue_ls,function(tissue_name){df = read.table(paste0(path,tissue_name,"_auroc.csv"),header = TRUE); df$'Tissue' = tissue_name; df$'Method' = method_fullname[df$'Method']; df}))
-
-df_auc = df_auc %>% filter(gt_set %in% c("Top100","CellMarkerDB")) %>% filter(!Method %in% "HighlyVariableGenes")
+df_auc = do.call(rbind,lapply(tissue_ls,function(tissue_name){df = read.table(file.path(folder_path,paste0(tissue_name,"_auroc.csv")),header = TRUE); df$'Tissue' = tissue_name;df}))
+df_auc$Method = method_fullname[df_auc$Method]
+df_auc = df_auc %>% filter(gt_set %in% c("Top100","CellMarkerDB")) %>% filter(!Method %in% "HVGs")
 df_auc$Method <- with(df_auc, reorder(Method, -AUROC, FUN = median))
 df_auc$gt_set <- factor(df_auc$gt_set,levels = c("CellMarkerDB","Top100"))
 levels(df_auc$gt_set) = c("Criterion1 - CellMarkerDB","Criterion2 - MaxFC")
@@ -310,7 +310,7 @@ ggsave(filename = "fig-ranking_comparison1.png", plot = p, width = 25, height = 
 ```{r}
 path = "./benchmark_result/"
 tissue_name = "marrow_facs"
-score_measure = read.table(paste0(path,tissue_name,"_density_index.csv"),header = TRUE)
+score_measure = read.table(paste0(path,tissue_name,"_density_index_no_dropout.csv"),header = TRUE)
 score_measure = score_measure %>% filter(Method!="wilcox_no_filter")
 score_measure$Method = ifelse(score_measure$Method %in% names(method_fullname),method_fullname[score_measure$Method],score_measure$Method)
 
@@ -321,7 +321,6 @@ score_measure$'color' = coldef[score_measure$Method]
 score_measure[score_measure$Method == "All genes","color"] = "black"
 score_measure$'line_type' = "solid"
 score_measure[score_measure$Method == "All genes","line_type"] = "dashed"
-
 score_measure[grepl("Seurat",score_measure$Method),"Method"] = "Seurat v4"
 
 # line_type = replace(coldef,names(coldef),"solid")
@@ -349,12 +348,35 @@ fig = ggplot(score_measure %>% filter(Method!="All genes") %>% filter(TopGene >=
     axis.line = element_line(colour = "black"))
   # geom_text_repel(data = score_measure %>%  filter(Method!="all genes") %>% group_by(Method) %>% slice_head(n = 2) %>% slice_tail(n = 1), aes(label = Method), hjust = 0)
 
-# # Add null distribution
-# null_score_measure = read.csv(paste0(path,tissue_name,"_DI_null.csv"),header = TRUE)
-# fig = fig + geom_boxplot(data = null_score_measure, aes(x = TopGene, y = DensityIndex, group = TopGene), inherit.aes = FALSE)
+# Add null distribution
+null_score_measure = read.csv(paste0(path,tissue_name,"_DI_null.csv"),header = TRUE)
+fig = fig + geom_boxplot(data = null_score_measure, aes(x = TopGene, y = DensityIndex, group = TopGene), inherit.aes = FALSE)
 
 ggsave(filename = "fig-densityindex.png", plot = fig, width = 5, height = 5)
 ```
+## Scatterplot
+```{r}
+score_measure = read.table(paste0(path,tissue_name,"_density_index_no_dropout.csv"),header = TRUE)
+score_measure = score_measure %>% filter(Method!="wilcox_no_filter")
+score_measure$Method = ifelse(score_measure$Method %in% names(method_fullname),method_fullname[score_measure$Method],score_measure$Method)
+score_measure$'color' = coldef[score_measure$Method]
+
+ggplot(score_measure %>% filter(Method!="All genes") %>% filter(TopGene <= 1000), aes(x = non_dropout_rate, y = Mean_SI, color = Method)) + 
+  geom_point() +
+  scale_color_manual(values = score_measure %>% filter(Method!="All genes") %>% select(c("Method","color")) %>% distinct() %>% tibble::deframe()) + facet_wrap(~TopGene)
+```
+## Prop of recovered cts
+```{r}
+recovery_rate <- reshape2::melt(recovery_rate,id.vars = "TopGene",value.name = "prop",variable.name = "Method")
+recovery_rate = recovery_rate %>% filter(Method!="wilcox_no_filter")
+recovery_rate$Method = ifelse(recovery_rate$Method %in% names(method_fullname),method_fullname[recovery_rate$Method],recovery_rate$Method)
+recovery_rate$'color' = coldef[recovery_rate$Method]
+
+ggplot(recovery_rate, aes(x = TopGene, y = prop, color = Method, group = Method)) + 
+  geom_line() +
+  scale_color_manual(values = score_measure %>% filter(Method!="All genes") %>% select(c("Method","color")) %>% distinct() %>% tibble::deframe()) + ylab("Prop. of recovered cell types")
+```
+
 
 # SupFig - Sensitivity Test
 ```{r}

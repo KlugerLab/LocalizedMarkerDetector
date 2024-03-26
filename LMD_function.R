@@ -2,9 +2,11 @@ cran_packages <- c("igraph","ggplot2", "cowplot", "RColorBrewer",
                    "data.table", "dplyr", "patchwork", 
                    "pheatmap", "ggplotify", "ggraph", 
                    "ClusterR", "Rcpp", "RcppArmadillo", 
-                   "tictoc","svMisc","RSpectra")
+                   "tictoc","svMisc","RSpectra","Matrix","progress","latex2exp","parallel")
+bioc_packages <- c("Seurat")
 sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
-lapply(cran_packages, require, character.only = TRUE)
+sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
+lapply(c(cran_packages,bioc_packages), require, character.only = TRUE)
 
 # Mtx operation===========
 # Enable C++11
@@ -19,7 +21,6 @@ cppFunction('arma::mat fastMatMult(arma::mat A, arma::mat B) {
 Rcpp::sourceCpp(code='
 #include <Rcpp.h>
 using namespace Rcpp;
-
 NumericVector calcKL(NumericVector p, NumericVector q) {
   double sum = 0;
   for (int j = 0; j < p.size(); ++j) {
@@ -54,7 +55,11 @@ NumericVector fastKLVector(NumericMatrix x, NumericVector y) {
 }
 ')
 Rowwise_normalize <- function(x){
+  x = x[rowSums(x)!=0,,drop = FALSE]
   return( sweep(x, 1, rowSums(x), FUN = "/") )
+}
+is_sparse_matrix <- function(m) {
+  any(grepl("Matrix", class(m)) & !grepl("dense", class(m)))
 }
 
 # Doubly Stochastic
@@ -84,20 +89,39 @@ sinkhorn_knopp = function(A, sums = rep(1, nrow(A)),
   }
   list(r = as.numeric(r), c = as.numeric(c))
 }
+sinkhorn_knopp_largeData = function(A, niter = 100, tol = 1e-8, verb = FALSE) {
+  # code refer to (https://rdrr.io/github/aaamini/nett/src/R/sinkhorn.R)
+  delta = Inf
+  for (irep in 1:niter) {
+    scale_fac <- 1 / sqrt(rowSums(A))
+    A <- Matrix::.sparseDiagonal(x = scale_fac) %*% A %*% Matrix::.sparseDiagonal(x = scale_fac)
+    
+    delta = pmax(max(abs(1 - rowSums(A))), max(abs(1 - colSums(A))))
+    if (verb) nett::printf("err = %3.5e\n", delta)
+    if (delta < tol){
+      cat("large_graph, doubly-stochastic iter step: ",irep,"\n")
+      break;
+    }
+  }
+  return(A)
+}
 
 Doubly_stochastic <- function(W){
-  scale_fac = sinkhorn_knopp(A = W, sym = TRUE)
-  P = diag(scale_fac[[1]]) %*% W %*% diag(scale_fac[[2]])
-  
-  return(P)
+  if(ncol(W) < 1e4){
+    scale_fac = sinkhorn_knopp(A = W, sym = TRUE)
+    P = diag(scale_fac[[1]]) %*% W %*% diag(scale_fac[[2]])
+    return(P)
+  }else{
+    return(sinkhorn_knopp_largeData(A = W))
+  }
 }
 
 # Build Cell Graph & Transition Mtx =======
 findDisconnectedComponents <- function(adj_matrix) {
   # Create a graph from the adjacency matrix
-  g <- graph_from_adjacency_matrix(adj_matrix, mode = "undirected")
+  g <- igraph::graph_from_adjacency_matrix(adj_matrix, mode = "undirected")
   # Find the connected components
-  components <- components(g)
+  components <- igraph::components(g)
   # Get the number of disconnected components
   num_components <- components$no
   # Get the corresponding nodes for each component
@@ -112,7 +136,8 @@ findShortestEdge <- function(component1, component2, data) {
   return(c(component1[min_distance_idx[1]], component2[min_distance_idx[2]]))
 }
 
-Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, self_loop = TRUE){
+Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, self_loop = 1){
+  cat("Constructing KNN graph\n")
   knn_list <- FNN::get.knn(feature_space, k = knn, algorithm = "kd_tree")
   Idx = knn_list$nn.index
   A = Matrix::sparseMatrix(i = rep(1:nrow(Idx),each = knn),
@@ -132,6 +157,7 @@ Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, se
   # Connect Components Using MST Principles
   if(adjust_by_MST){
     while(length(filtered_components) > 1){
+      cat("Disconnected Components, adjust by MST.\n")
       edgesToAdd <- lapply(1:(length(filtered_components)-1), function(i) {
         lapply((i + 1):length(filtered_components), function(j) {
           findShortestEdge(filtered_components[[i]], filtered_components[[j]], feature_space)
@@ -169,25 +195,27 @@ Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, se
   }
 
   A = as.matrix(A)
-  if(self_loop){
-    diag(A) = 1
-  }
-  
+  diag(A) = self_loop
   # Graph affinity matrix by symmetrize the adjacency mtx
   # W = (A + t(A))/2 # weighted
   W = pmin(A + t(A),1) # unweighted
-
-  return(list(graph = W,adj_matrix = A, component = filtered_components))
+  diag(W) = self_loop
+  if(ncol(W) > 1e4){
+    return(list(graph = as(W,"sparseMatrix"), adj_matrix = as(A,"sparseMatrix"), component = filtered_components))
+  }else{
+    return(list(graph = W, adj_matrix = A, component = filtered_components))
+  }
 }
 
-Symmetric_gaussian_graph <- function(knn = 5, feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = TRUE){
+Symmetric_gaussian_graph <- function(knn = 5, feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = 1){
+  cat("Constructing Gaussian kernel\n")
   node_num = nrow(feature_space)
   knn_list <- FNN::get.knn(feature_space, k = node_num - 1, algorithm = "kd_tree")
   Idx = knn_list$nn.index
 
   # Gaussian Kernel transfer
   knn_dist = knn_list$nn.dist
-  bandwidth = coef * (knn_dist[,knn])^2
+  bandwidth = coef * (knn_dist[,knn])^2 # adaptive bandwidth
   knn_dist = (knn_dist^2 / bandwidth)^alpha
   knn_dist = exp(-knn_dist)
   knn_dist[knn_dist < epsilon] = 0 # make graph sparse
@@ -198,9 +226,7 @@ Symmetric_gaussian_graph <- function(knn = 5, feature_space, alpha = 1, coef = 2
                            x = c(t(knn_dist)))
   rownames(A) = colnames(A) = rownames(feature_space)
   A = as.matrix(A)
-  if(self_loop){
-    diag(A) = 1
-  }
+  diag(A) = self_loop
 
   # Graph affinity matrix (by default graph is connected)
   W = (A + t(A))/2
@@ -217,7 +243,7 @@ Obtain_Pls <- function(W, max_time){
   # P = Rowwise_normalize(W)
   # eig_res = RSpectra::eigs_sym(P, k = 1, which = "LM")
   max_step = max_time
-  P_ls = NULL
+  P_ls = list(P)
   if(max_step < 1){
     stop("Incorrect diffusion time, no propogation")
   }else{
@@ -231,7 +257,7 @@ Obtain_Pls <- function(W, max_time){
     }
     setTxtProgressBar(pb, 100)
   }
-  names(P_ls) = 2^seq(1,t-1)
+  names(P_ls) = 2^seq(0,t-1)
   # Add t = 0
   P_ls = c(list(diag(nrow(W))),P_ls) 
   names(P_ls)[1] = "0"
@@ -269,7 +295,38 @@ plot_knn_graph <- function(affinity_m, label = NULL, layout){
 }
 
 # Calculating Diffusion score =========
-fast_calculate_score_profile <- function(W, max_time = 2^15, init_state, P_ls = NULL){
+## Define a series of score_profile
+get_score_profile <- function(state_0 = NULL, state_t = NULL, state_inf = NULL, P_diag_t = NULL,
+                              score_ls = c("score0","delta_correction")){
+  # score_ls = c("score0","score1","delta_correction","entropy")
+  df = do.call(cbind,lapply(score_ls,function(s){
+    if(s == "score0"){
+      # KL(p^0||p^t)
+      return(fastKLMatrix(state_0, state_t))
+    }
+    if(s == "max_score0"){
+      return(fastKLVector(state_0,state_inf))
+    }
+    if(s == "score1"){
+      # KL(p^t||p^inf)
+      return(fastKLVector(state_t, state_inf))
+    }
+    if(s == "delta_correction"){
+      # KL(p^0||p_delta^t)
+      return(fastKLVector(state_0, P_diag_t))
+    }
+    if(s == "entropy"){
+      # H(pt)
+      return(-fastKLVector(state_t, rep(1,ncol(state_t))))
+    }
+  }))
+  colnames(df) = score_ls
+  return(df)
+}
+
+fast_calculate_score_profile <- function(W, max_time = 2^15, 
+                                         init_state, P_ls = NULL,
+                                         score_ls = c("score0")){
   if((ncol(W) != ncol(init_state)) & (ncol(W) == nrow(init_state))){
     init_state = t(init_state)
   }
@@ -284,66 +341,275 @@ fast_calculate_score_profile <- function(W, max_time = 2^15, init_state, P_ls = 
     P_ls = Obtain_Pls(W,max_time)
   }
 
-  # # Calculate multi-scale KL divergence
-  # score_df = do.call(cbind,lapply(P_ls,function(P){
-  #   state = fastMatMult(init_state, P)
-  #   c(fastKLMatrix(init_state, state),fastKLVector(state,final_state))
-  # }) )
-  # score_df = cbind(score_df[1:nrow(init_state),],
-  #                  score_df[(nrow(init_state)+1):nrow(score_df),])
-  # colnames(score_df) = paste0(rep(c("score0_","score1_"), each = ncol(score_df)/2),
-  #                             colnames(score_df))
-  # score_df = cbind(score_df,fastKLVector(init_state,final_state))
-  # colnames(score_df)[ncol(score_df)] = "score1_0"
-  # score_df = score_df[,c(1:floor(ncol(score_df)/2),ncol(score_df),(floor(ncol(score_df)/2)+1):(ncol(score_df)-1))]
-  # rownames(score_df) = rownames(init_state)
-  # sub_score0 = grep("score0",colnames(score_df))
-  # sub_score1 = grep("score1_0",colnames(score_df))
-  # score_df = data.frame(score_df[,sub_score0]/score_df[,sub_score1])
-  # cumulative_score = rowSums(score_df)
-  
   # Calculate multi-scale KL divergence
-  score_df = do.call(cbind,lapply(P_ls,function(P){
+  score_df = do.call(cbind,lapply(1:length(P_ls),function(i){
+    P = P_ls[[i]]
     state = fastMatMult(init_state, P)
-    c(fastKLMatrix(init_state, state), fastKLVector(init_state, diag(P)))
+    score_df = get_score_profile(state_0 = init_state,
+                                 state_t = state,
+                                 state_inf = final_state,
+                                 # P_diag_t = diag(P),
+                                 score_ls = score_ls)
+    colnames(score_df) = paste0(colnames(score_df),"_",names(P_ls)[i])
+    score_df
   }) )
-  score_df = cbind(score_df[1:nrow(init_state),],
-                   score_df[(nrow(init_state)+1):nrow(score_df),])
-  colnames(score_df) = paste0(rep(c("score0_","correction_"), each = ncol(score_df)/2),
-                              colnames(score_df))
+  # Add scale_factor
+  score_df = cbind(score_df,
+                   get_score_profile(state_0 = init_state,
+                                     state_t = init_state,
+                                     state_inf = final_state,
+                                     score_ls = c("entropy","max_score0")))
+  rownames(score_df) = rownames(init_state)
+  score_df = data.frame(score_df)
+  return(score_df)
+}
+fast_calculate_score_profile_largeData <- function(W, max_time = 2^15, init_state,
+                                                   score_ls = c("score0")){
+  cat("Calculate LMD score profile for large data\n")
+  if((ncol(W) != ncol(init_state)) & (ncol(W) == nrow(init_state))){
+    init_state = t(init_state)
+  }
+  if(ncol(W) != ncol(init_state)){
+    stop("Check the dimension!")
+  }
+  final_state = rep(1/nrow(W),nrow(W)) # bi-stochastic
+  
+  # Calculate transition matrix
+  cat("Doubly Stochastic\n")
+  P = Doubly_stochastic(W)
+  # cat("Adjust self-loop weight")
+  # diag(P) = 2/(min(rowSums(W)) - max(diag(W)))
+  # P = Doubly_stochastic(P)
+  
+  # initialize score profile
+  score_df = get_score_profile(state_0 = init_state,
+                               state_t = init_state,
+                               state_inf = final_state,
+                               # P_t = diag(ncol(P)),
+                               score_ls = score_ls)
+  colnames(score_df) = paste0(colnames(score_df),"_","0")
+  pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
+                         total = floor(log(max_time,2)),
+                         complete = "=",   # Completion bar character
+                         incomplete = "-", # Incomplete bar character
+                         current = ">",    # Current bar character
+                         clear = FALSE,    # If TRUE, clears the bar when finish
+                         width = 100)
+  # state_pre = init_state
+  break_flag = FALSE
+  for(t in 0:floor(log(max_time,2))){ # t here represents the exponent
+    # cat("diffusion time:2^",t,"\n")
+    # Automatic decide max_time by checking whether the diag of P -> 1/n
+    if(!is_sparse_matrix(P) && (max(abs((ncol(P) * Matrix::diag(P)) * ncol(P) - ncol(P))) < 1e-2 * ncol(P))){
+      cat("\nmax diffusion time:2^",t-1,"\n")
+      break_flag = TRUE
+      break
+    }
+    # Check the sparsity of P, if too dense, transfer it to dense matrix
+    if(is_sparse_matrix(P) && (min(rowSums(P == 0)/ncol(P)) < 0.9)){
+      P = as.matrix(P)
+    }
+    # cat("Graph dyadic\n")
+    if(t > 0){
+      if(is_sparse_matrix(P)){
+        P = P %*% P
+      }else{
+        P = fastMatMult(P, P)
+      }
+    }
+    state = fastMatMult(init_state, as.matrix(P))
+    score_df_tmp = get_score_profile(state_0 = init_state,
+                                 state_t = state,
+                                 state_inf = final_state,
+                                 # P_diag_t = diag(P),
+                                 score_ls = score_ls)
+    colnames(score_df_tmp) = paste0(colnames(score_df_tmp),"_",as.character(2^t))
+    score_df = cbind(score_df,score_df_tmp)
+    # score_df[,as.character(2^t)] = c(fastKLMatrix(init_state, state), fastKLVector(state, rep(1,ncol(state)))) # -entropy of pt
+    pb$tick()
+    # state_pre = state
+  }
+  if(!break_flag){cat("\nmax diffusion time:2^",t,"\n")}
+  
+  # Add scale_factor
+  score_df = cbind(score_df,
+                   get_score_profile(state_0 = init_state,
+                                     state_t = init_state,
+                                     state_inf = final_state,
+                                     score_ls = c("entropy","max_score0")))
+  
+  rownames(score_df) = rownames(init_state)
+  score_df = data.frame(score_df)
+  return(score_df)
+}
+fast_calculate_score_profile_highres <- function(W, max_time = 100, init_state, 
+                                                 score_ls = c("score0")){
+  cat("Calculate LMD score profile for large data\n")
+  if((ncol(W) != ncol(init_state)) & (ncol(W) == nrow(init_state))){
+    init_state = t(init_state)
+  }
+  if(ncol(W) != ncol(init_state)){
+    stop("Check the dimension!")
+  }
+  final_state = rep(1/nrow(W),nrow(W)) # bi-stochastic
+  
+  # Calculate transition matrix
+  cat("Doubly Stochastic\n")
+  P = Doubly_stochastic(W)
+  P = as.matrix(P)
+  score_df = get_score_profile(state_0 = init_state,
+                               state_t = init_state,
+                               state_inf = final_state,
+                               # P_t = diag(ncol(P)),
+                               score_ls = score_ls)
+  colnames(score_df) = paste0(colnames(score_df),"_","0")
+  pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
+                         total = max_time,
+                         complete = "=",   # Completion bar character
+                         incomplete = "-", # Incomplete bar character
+                         current = ">",    # Current bar character
+                         clear = FALSE,    # If TRUE, clears the bar when finish
+                         width = 100)
+  state = init_state
+  break_flag = FALSE
+  for(t in 1:max_time){
+    # cat("diffusion time:2^",t,"\n")
+    # Automatic decide max_time by checking whether the diag of P -> 1/n
+    if(!is_sparse_matrix(P) && (max(abs((ncol(P) * Matrix::diag(P)) * ncol(P) - ncol(P))) < 1e-2 * ncol(P))){
+      cat("\nmax diffusion time:",t-1,"\n")
+      break_flag = TRUE
+      break
+    }
+    state = fastMatMult(state, P)
+    score_df_tmp = get_score_profile(state_0 = init_state,
+                                     state_t = state,
+                                     state_inf = final_state,
+                                     # P_diag_t = diag(P),
+                                     score_ls = score_ls)
+    colnames(score_df_tmp) = paste0(colnames(score_df_tmp),"_",as.character(2^t))
+    score_df = cbind(score_df,score_df_tmp)
+    # score_df[,as.character(t)] = c(fastKLMatrix(init_state, state), fastKLVector(state, rep(1,ncol(state)))) # -entropy of pt
+    pb$tick()
+  }
+  if(!break_flag){cat("\nmax diffusion time:",t,"\n")}
+  
+  # Add scale_factor
+  score_df = cbind(score_df,
+                   get_score_profile(state_0 = init_state,
+                                     state_t = init_state,
+                                     state_inf = final_state,
+                                     score_ls = c("entropy","max_score0")))
+  
   rownames(score_df) = rownames(init_state)
   score_df = data.frame(score_df)
   
-  # Add scale_factor
-  ## Maximum value
-  score_df[,"maximum_val"] = fastKLVector(init_state,final_state)
-  ## Entropy
-  score_df[,"entropy"] = -score_df[,"correction_0"]
-  
   return(score_df)
 }
-obtain_lmds = function(score_profile, correction){
+Calculate_outgoing_weight <- function(W, max_time = 2^15, init_state){
+  cat("Calculate LMD score profile for large data\n")
+  if((ncol(W) != ncol(init_state)) & (ncol(W) == nrow(init_state))){
+    init_state = t(init_state)
+  }
+  if(ncol(W) != ncol(init_state)){
+    stop("Check the dimension!")
+  }
+  final_state = rep(1/nrow(W),nrow(W)) # bi-stochastic
+  
+  # Calculate transition matrix
+  cat("Doubly Stochastic\n")
+  P = Doubly_stochastic(W)
+  cat("self-weight:",diag(P)[1],"\n")
+  
+  pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
+                         total = floor(log(max_time,2)),
+                         complete = "=",   # Completion bar character
+                         incomplete = "-", # Incomplete bar character
+                         current = ">",    # Current bar character
+                         clear = FALSE,    # If TRUE, clears the bar when finish
+                         width = 100)
+  indicate_mtx = init_state > 0
+  all_weight_to_detect = t(W %*% t(indicate_mtx))
+  out_weight = rowSums(all_weight_to_detect * (!indicate_mtx))
+  inner_weight = (rowSums(all_weight_to_detect * indicate_mtx) + rowSums(indicate_mtx))/2
+  out_in_ratio = out_weight / inner_weight
+  out_in_ratio_df = data.frame("0" = c(inner_weight,rowSums(indicate_mtx)))
+  break_flag = FALSE
+  for(t in 0:floor(log(max_time,2))){
+    # cat("diffusion time:2^",t,"\n")
+    # Automatic decide max_time by checking whether the diag of P -> 1/n
+    if(!is_sparse_matrix(P) && (max(abs((ncol(P) * Matrix::diag(P)) * ncol(P) - ncol(P))) < 1e-2 * ncol(P))){
+      cat("\nmax diffusion time:2^",t-1,"\n")
+      break_flag = TRUE
+      break
+    }
+    # Check the sparsity of P, if too dense, transfer it to dense matrix
+    if(is_sparse_matrix(P) && (min(rowSums(P == 0)/ncol(P)) < 0.9)){
+      P = as.matrix(P)
+    }
+    # cat("Graph dyadic\n")
+    if(t > 0){
+      if(is_sparse_matrix(P)){
+        P = P %*% P
+      }else{
+        P = fastMatMult(P, P)
+      }
+    }
+    state = fastMatMult(init_state, as.matrix(P))
+    pb$tick()
+    
+    # Add a checkpoint of outgoing weight
+    indicate_mtx = state > 0
+    all_weight_to_detect = t(W %*% t(indicate_mtx))
+    out_weight = rowSums(all_weight_to_detect * (!indicate_mtx))
+    inner_weight = (rowSums(all_weight_to_detect * indicate_mtx) + rowSums(indicate_mtx))/2
+    out_in_ratio = out_weight / inner_weight
+    out_in_ratio_df[,as.character(2^t)] = c(inner_weight,rowSums(indicate_mtx))
+  }
+  colnames(out_in_ratio_df)[1] = "0"
+  if(!break_flag){cat("\nmax diffusion time:2^",t-1,"\n")}
+  out_in_ratio_df = cbind(out_in_ratio_df[1:nrow(init_state),],
+                          out_in_ratio_df[(nrow(init_state)+1):nrow(out_in_ratio_df),])
+  colnames(out_in_ratio_df) = paste0(rep(c("ratio_","count_"), each = ncol(out_in_ratio_df)/2),
+                              colnames(out_in_ratio_df))
+  ## Entropy
+  out_in_ratio_df[,"entropy"] = -fastKLVector(init_state, rep(1,ncol(init_state)))
+  rownames(out_in_ratio_df) = rownames(init_state)
+  return(out_in_ratio_df)
+}
+
+obtain_lmds = function(score_profile, correction = FALSE){
   # get LMDS
-  sub_score0 = grep("score0",colnames(score_profile))
-  sub_correction = grep("correction",colnames(score_profile))
+  sub_score0 = grep("^score0",colnames(score_profile))
+  sub_delta_correction = grep("^delta_correction",colnames(score_profile))
   if(!correction){
     # raw LMDS
     # Scale the score profile by maximum value
-    df = score_profile/score_profile[,"maximum_val"]
+    df = score_profile/score_profile[,"max_score0"]
     cumulative_score = rowSums(df[,sub_score0])
   }else{
     # adjusted LMDS
     # Scale the score profile by entropy
     df = score_profile/score_profile[,"entropy"]
-    cumulative_score = rowSums(df[,sub_score0] - df[,sub_correction])
+    cumulative_score = rowSums(df[,sub_score0] - df[,sub_delta_correction])
   }
   return(cumulative_score)
 }
 
 # combine fast_calculate_score_profile & obtain_lmds in one step
-fast_get_lmds <- function(W, max_time = 2^15, init_state, P_ls = NULL, correction = FALSE){
-  score_profile = fast_calculate_score_profile(W = W, max_time = max_time, 
-                                               init_state = init_state, P_ls = P_ls)
+fast_get_lmds <- function(W, max_time = 2^15, init_state, P_ls = NULL, correction = FALSE, largeData = TRUE, highres = FALSE){
+  if(highres){
+    score_profile = fast_calculate_score_profile_highres(W = W, max_time = max_time, 
+                                                           init_state = init_state)
+    cumulative_score = obtain_lmds(score_profile = score_profile, correction = correction)
+    return(list(score_profile = score_profile,cumulative_score = cumulative_score))
+  }
+  if((ncol(W) > 1e4) | largeData){
+    score_profile = fast_calculate_score_profile_largeData(W = W, max_time = max_time, 
+                                                 init_state = init_state)
+  }else{
+    score_profile = fast_calculate_score_profile(W = W, max_time = max_time, 
+                                                 init_state = init_state, P_ls = P_ls)
+  }
   cumulative_score = obtain_lmds(score_profile = score_profile, correction = correction)
   return(list(score_profile = score_profile,cumulative_score = cumulative_score))
 }
@@ -369,8 +635,8 @@ knee_point = function(Vecs){
   return(knee_point)
 }
 LMD <- function(expression, feature_space, knn = 5, 
-                kernel = FALSE, max_time = 2^15, adjust_bridge = TRUE, self_loop = TRUE,
-                score_correction = FALSE){
+                kernel = FALSE, max_time = 2^15, adjust_bridge = TRUE, self_loop = 1,
+                score_correction = FALSE, largeData = TRUE, highres = FALSE, min_cell = 5){
   if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
   if(kernel){
     W = Symmetric_gaussian_graph(knn = knn, feature_space = feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = self_loop)$'graph'
@@ -378,8 +644,15 @@ LMD <- function(expression, feature_space, knn = 5,
     W = Symmetric_KNN_graph(knn = knn, feature_space = feature_space, adjust_by_MST = adjust_bridge, self_loop = self_loop)$'graph'
   }
   rho = Rowwise_normalize(expression)
+  rho = rho[which(apply(rho,1,function(x) sum(x>0) >= min_cell))
+            ,,drop = FALSE] # sanity check & remove genes which express at less than 5 cells
+  cat(sprintf("Remove %d genes which express at less than %d cells\n",
+              nrow(expression) - nrow(rho),min_cell))
   res = fast_get_lmds(W = W, max_time = max_time,
-                                   init_state = rho, correction = score_correction)
+                                   init_state = rho, 
+                      correction = score_correction, 
+                      largeData = largeData,
+                      highres = highres)
   return(res)
 }
 show_result_lmd <- function(res.lmd, n = length(res.lmd$cumulative_score)){
@@ -387,15 +660,37 @@ show_result_lmd <- function(res.lmd, n = length(res.lmd$cumulative_score)){
   score = sort(score)
   df = data.frame(score = score)
   df$'rank' = 1:nrow(df)
-  print(head(df,n = n))
+  # print(head(df,n = n))
   gene_rank = setNames(df$'rank',rownames(df))
   return(list(gene_table = df, gene_rank = gene_rank, cut_off_gene = gene_rank[1:knee_point(score)]))
 }
 
 # Visualization =========
-FeaturePlot_custom <- function(value,coord,value_name = NULL,title_name = NULL,order_point = TRUE){
+FeaturePlot_custom <- function(coord, value, reduction = NULL, dims = 1:2, value_name = NULL,title_name = NULL,order_point = TRUE){
+  if(class(coord) == "Seurat"){
+    if(is.character(value)){
+      if(value %in% colnames(coord@meta.data)){
+        value = coord@meta.data[,value]
+      }
+      else{
+        stop("Feature is not found in the given seurat object")
+      }
+    }
+    
+    if(!is.null(reduction)){
+      coord <- Embeddings(coord, reduction = reduction)[,dims]
+    } else if ("umap" %in% names(coord@reductions)){
+      coord <- Embeddings(coord, reduction = "umap")[,dims]
+    } else if ("tsne" %in% names(coord@reductions)){
+      coord <- Embeddings(coord, reduction = "tsne")[,dims]
+    } else{
+      stop("Neither UMAP nor t-SNE embeddings are found in the Seurat object.")
+    }
+  }else if(is.null(coord)){
+    stop("coord is missing")
+  }
   if(length(value)!=nrow(coord)){stop("Unmatched Dimension!")}
-  df = cbind(coord[,1:2],value = value)
+  df = data.frame(cbind(coord[,1:2],value = value))
   if(order_point){df = df[order(df[,3]),]}
   p <- ggplot(df, aes(x=!!as.name(colnames(coord)[1]), y=!!as.name(colnames(coord)[2]), color=value)) + 
     geom_point(size=0.5)
@@ -404,15 +699,16 @@ FeaturePlot_custom <- function(value,coord,value_name = NULL,title_name = NULL,o
   }
   p = p + scale_x_continuous(breaks = NULL) + scale_y_continuous(breaks = NULL) +
     theme(
-          plot.title = element_text(face="bold", size = 30),
-          legend.title = element_text(size = 20),
-          legend.text = element_text(size = 15),
-          axis.title.x = element_blank(),
-          axis.title.y = element_blank(),
-          panel.grid = element_blank(),
-          panel.background = element_blank()) + 
+      plot.title = element_text(face="bold", size = 30),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 15),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      panel.grid = element_blank(),
+      panel.background = element_blank()) + 
     labs(color = value_name, title = title_name)
   return(p)
+  
 }
 FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, check_time = NULL, gene_name = NULL, gene_color = "blue"){
   init_state = as.matrix(init_state)
@@ -428,9 +724,9 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
   if((ncol(init_state)!=graph_node_number) & (nrow(init_state) == graph_node_number)){
     init_state = t(init_state)
   }
-  if(ncol(init_state)!=graph_node_number | nrow(init_state)!=1){stop("Unmatched dimension")}
+  if(ncol(init_state)!=graph_node_number | nrow(init_state)!=1){stop("Unmatched dimension, can only take expression vector for one gene!")}
   check_step = sort(unique(floor(log(check_time,base = 2))))
-  check_step = check_step[check_step >= 1]
+  check_step = check_step[check_step >= 0]
   
   if(0 %in% check_time){
     check_time = c(0,2^check_step)
@@ -438,6 +734,7 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
     check_time = 2^check_step
   }
   if(is.null(P_ls)){P_ls = Obtain_Pls(W,max(check_time))}
+  check_time = check_time[check_time %in% names(P_ls)]
   sub = match(check_time,names(P_ls))
   multi_state = sapply(P_ls[sub],function(P){
     state = fastMatMult(init_state, P)
@@ -453,7 +750,7 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
       legend_break_label = formatC(legend_break_label, format = "e", digits = 0)
     }
     p = suppressWarnings({
-      FeaturePlot_custom(multi_state[,i]/max(multi_state[,i]),coord,
+      FeaturePlot_custom(coord = coord, value = multi_state[,i]/max(multi_state[,i]),
                                  title_name = ifelse(as.numeric(colnames(multi_state)[i])==0,
                                                      latex2exp::TeX("$T = 0$"),
                                                      latex2exp::TeX(paste0("$T = 2^{",log(as.numeric(colnames(multi_state)[i]),base = 2),"}$"))),
@@ -472,13 +769,29 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
   
   return(p)
 }
-FeaturePlot_meta <- function(dat, coord, feature_partition){
+FeaturePlot_meta <- function(dat, coord = NULL, feature_partition, reduction = NULL, assays = "RNA"){
+  if(class(dat) == "Seurat"){
+    if (!is.null(reduction)){
+      coord <- Embeddings(dat, reduction = reduction)
+    } else if ("umap" %in% names(dat@reductions)){
+      coord <- Embeddings(dat, reduction = "umap")
+    } else if ("tsne" %in% names(dat@reductions)){
+      coord <- Embeddings(dat, reduction = "tsne")
+    } else{
+      stop("Neither UMAP nor t-SNE embeddings are found in the Seurat object.")
+    }
+    dat = as.matrix(dat[[assays]]@data)
+  }else if(is.null(dat)){
+    stop("Data missing")
+  }else if(is.null(coord)){
+    stop("coordinate missing")
+  }
   feature_partition = as.factor(feature_partition)
   pl <- lapply(levels(feature_partition), function(level){
     genes = names(feature_partition)[feature_partition == level]
     plot.title1 <- sprintf("Module %s (%d genes)",level,length(genes))
-    df = cbind(coord[colnames(dat),,drop = FALSE],
-               value = apply(dat[genes,,drop = FALSE],2,mean))
+    df = data.frame(cbind(coord[colnames(dat),,drop = FALSE],
+               value = apply(dat[genes,,drop = FALSE],2,mean)))
     p1 <- ggplot(df[order(df$value),], aes(x=!!as.name(colnames(df)[1]), y=!!as.name(colnames(df)[2]), color=value)) + 
       geom_point(size = 0.2) + 
       scale_color_gradient(low = "lightgrey", high = "blue") + 
@@ -491,7 +804,9 @@ FeaturePlot_meta <- function(dat, coord, feature_partition){
   names(pl) = levels(feature_partition)
   return(pl)
 }
-Visualize_score_pattern <- function(score_profile, genes = NULL, label_class = NULL, facet_class = NULL, add_point = NULL){
+Visualize_score_pattern <- function(score_profile, genes = NULL, 
+                                    label_class = NULL, facet_class = NULL, 
+                                    add_point = NULL, dyadic = TRUE, text = FALSE){
   score_df = score_profile
   if(!all(genes %in% rownames(score_df))){stop("Genes not found!")}
   profiles = names(which(table(sub("_\\d+", "", colnames(score_df)))>1))
@@ -509,7 +824,7 @@ Visualize_score_pattern <- function(score_profile, genes = NULL, label_class = N
   }
   
   if(!is.null(facet_class)){
-    if(length(facet_class)!=length(genes)){
+    if(length(facet_class)!=length(genes) & facet_class!="profiles"){
       warning("Facet labels doesn't match genes, ignore facet labels")
     }else{
       score_df$'facet' = facet_class
@@ -517,22 +832,29 @@ Visualize_score_pattern <- function(score_profile, genes = NULL, label_class = N
   }
 
   df <- reshape2::melt(score_df,
-                       id = colnames(score_df)[!grepl(paste0(profiles,collapse = "|"),colnames(score_df))],
+                       id = colnames(score_df)[!grepl(paste0(profiles,"_",collapse = "|"),colnames(score_df))],
                        variable.name = c("step"), value.name = "score")
-  df$profiles = apply(do.call(cbind,lapply(profiles,function(p){ifelse(grepl(p,df$step),p,NA)})),1,function(x){x[!is.na(x)]})
+  df$profiles = sub("_([^_]*)$", "\\1", sub("\\d+$", "", df$step))
   df$step = sub(".*_([0-9]+).*", "\\1", df$step)
   x_breaks = unique(as.numeric(df$step))
-  names(x_breaks) = pmax(log(x_breaks,base = 2),0)
-  names(x_breaks) = ifelse(names(x_breaks) == "0",names(x_breaks),paste0("2^",names(x_breaks)))
-  x_breaks = setNames(names(x_breaks),x_breaks)
-  df$step = as.factor(as.numeric(df$step))
-  levels(df$step) = x_breaks[levels(df$step)]
-  
+  if(max(diff(x_breaks)) > 1 & dyadic){
+    names(x_breaks) = log(x_breaks,base = 2)
+    names(x_breaks) = ifelse(names(x_breaks) == "-Inf","0",paste0("2^",names(x_breaks)))
+    x_breaks = setNames(names(x_breaks),x_breaks)
+    df$step = as.factor(as.numeric(df$step))
+    levels(df$step) = x_breaks[levels(df$step)]
+  }else{
+    df$step = as.numeric(df$step)
+  }
   if(!is.null(label_class)){
     p = ggplot(data = df, mapping = aes(x = step, y = score, color = label, linetype = profiles)) + 
-      geom_line(aes(group = interaction(gene,profiles))) + labs(x = "Time", y = "Normalized Diffusion KL Score")  + 
-      geom_text(data = df %>% group_by(interaction(gene,profiles)) %>% slice_head(n = 4) %>% slice_tail(n = 1),
-                aes(label = gene), hjust = 0) + theme(axis.text.x = element_text(angle = 45,hjust = 1))
+      geom_line(aes(group = interaction(gene,profiles))) + labs(x = "Time", y = "Normalized Diffusion KL Score")
+    if(text == TRUE){
+      p = p +
+        geom_text(data = df %>% group_by(interaction(gene,profiles)) %>% slice_head(n = 4) %>% slice_tail(n = 1),
+                  aes(label = gene), hjust = 0) + theme(axis.text.x = element_text(angle = 45,hjust = 1))
+    }
+
   }else{
     p = ggplot(data = df, mapping = aes(x = step, y = score, color = gene, linetype = profiles)) + 
       geom_line(aes(group = interaction(gene,profiles))) + labs(x = "Time", y = "Normalized Diffusion KL Score")
@@ -548,7 +870,11 @@ Visualize_score_pattern <- function(score_profile, genes = NULL, label_class = N
       ))
   }
   if(!is.null(facet_class)){
-    p = p + facet_wrap(~facet,scales = "free")
+    if(facet_class == "profiles"){
+      p = p + facet_wrap(~profiles,scales = "free")
+    }else{
+      p = p + facet_wrap(~facet,scales = "free")
+    }
   }
   p = p + theme(
     plot.title = element_text(face="bold", size = 30),
@@ -615,9 +941,10 @@ Calculate_distance <- function(dat, method){
   return(dist)
 }
 
+# Obtain Modules Activity Score ========
 ## Calculate Cell Module-activity score
 Obtain_cell_partition <- function(expr_dat, gene_partition, 
-                                  cell_kNN_graph, major_vote = 5){
+                                  cell_kNN_graph = NULL, major_vote = 5){
   # Fit GMM
   if(sum(!names(gene_partition) %in% rownames(expr_dat))){
     stop("gene name doesn't match data")}
@@ -627,24 +954,28 @@ Obtain_cell_partition <- function(expr_dat, gene_partition,
   })
   rownames(meta_g) = colnames(expr_dat)
   
-  tic()
+  # tic()
   cell_block = apply(meta_g,2,function(vec){GMM_partition(vec)})
-  toc()
+  # toc()
   # cell_block = as.data.frame(meta_g) %>% reframe(across(everything(), GMM_partition))
   cell_block = as.matrix(cell_block) + 0
   
   # Local smooth
-  cell_block = cell_kNN_graph %*% cell_block
-  cell_block = (cell_block > major_vote) + 0
+  if(!is.null(cell_kNN_graph)){
+    cell_block = cell_kNN_graph %*% cell_block
+    cell_block = (cell_block >= major_vote) + 0
+  }
   
   colnames(cell_block) = levels(gene_partition)
   rownames(cell_block) = colnames(expr_dat)
   return(cell_block)
 }
 GMM_partition <- function(vector){
-  opt = ClusterR::Optimal_Clusters_GMM(as.matrix(vector),max_clusters = 10, criterion = "BIC", km_iter = 10, em_iter = 5, seed = 1, plot_data = FALSE)
+  # cat("bottleneck\n")
+  i = 1
+  opt = ClusterR::Optimal_Clusters_GMM(as.matrix(vector),max_clusters = 10, criterion = "BIC", km_iter = 10, em_iter = 5, seed = i, plot_data = FALSE)
   opt_num = which.min(opt)
-  gmm = ClusterR::GMM(as.matrix(vector),gaussian_comps = opt_num, km_iter = 10, em_iter = 5, seed = 1)
+  gmm = ClusterR::GMM(as.matrix(vector),gaussian_comps = opt_num, km_iter = 10, em_iter = 5, seed = i)
   labels = predict(gmm,as.matrix(vector))
   
   
@@ -683,16 +1014,114 @@ GMM_subsampling <- function(seed, gene_partition, expr_dat, cell_kNN_graph, majo
   sub_gene_partition = setNames(sub_gene_partition$gene_partition,sub_gene_partition$gene_name)
   return(Obtain_cell_partition(expr_dat, gene_partition = sub_gene_partition, cell_kNN_graph, major_vote))
 }
+FindPC = function(srat){
+  stdv <- srat[["pca"]]@stdev
+  sum.stdv <- sum(srat[["pca"]]@stdev)
+  percent.stdv <- (stdv / sum.stdv) * 100
+  cumulative <- cumsum(percent.stdv)
+  co1 <- which(cumulative > 90 & percent.stdv < 5)[1]
+  co2 <- sort(which((percent.stdv[1:length(percent.stdv) - 1] - 
+                       percent.stdv[2:length(percent.stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min.pc <- min(co1, co2)
+  return(min.pc)
+}
+AddModuleActivityScore <- function(srat, gene_partition, assay = "RNA", do_local_smooth = TRUE, knn = 10, major_vote = 5, nloop = 100){
+  # adjust the format of gene_partition
+  gene_partition = setNames(as.character(gene_partition),names(gene_partition))
+  gene_partition = gene_partition[names(gene_partition) %in% rownames(srat)]
+  gene_partition = as.factor(gene_partition)
+  dat = srat[[assay]]@data[names(gene_partition),]
+  if(do_local_smooth){
+    if ("pca" %in% names(srat@reductions)){
+      ndims = FindPC(srat)
+      feature_space <- Embeddings(srat, reduction = "pca")[,1:ndims]
+      cat(ncol(feature_space),"PC used for building graph for majority vote\n")
+    }else if ("lsi" %in% names(srat@reductions)){
+      ndims = 50
+      feature_space <- Embeddings(srat, reduction = "lsi")[,2:ndims]
+      cat(ncol(feature_space),"LSI used for building graph for majority vote\n")
+    }
+    else{
+      stop("Please RunPCA")
+    }
+    A = Symmetric_KNN_graph(knn = knn, feature_space = feature_space)$'adj_matrix'
+    cat(sprintf("Do Major Vote: at least %d out of %d neighbors(self-include) expressed\n", major_vote, knn + 1))
+  }else{
+    A = NULL
+  }
+  cat("Start Loop\n")
+  pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
+                         total = nloop,
+                         complete = "=",   # Completion bar character
+                         incomplete = "-", # Incomplete bar character
+                         current = ">",    # Current bar character
+                         clear = FALSE,    # If TRUE, clears the bar when finish
+                         width = 100)
+  cell_block_loop = NULL
+  for(loop in 1:nloop){
+    cell_block_loop = c(cell_block_loop,list(GMM_subsampling(seed = loop, 
+                                                             gene_partition, 
+                                                             expr_dat = dat, 
+                                                             cell_kNN_graph = A, major_vote)))
+    pb$tick()
+  }
+  cell_block_prop = Reduce(`+`, cell_block_loop) / length(cell_block_loop)
+  cell_block = cell_block_prop
+  colnames(cell_block) = paste0("Module",colnames(cell_block))
+  srat <- AddMetaData(srat, cell_block, col.name = colnames(cell_block))
+  return(srat)
+}
 
 
 # Test Function =============
-quick_marker_benchmark <- function(gene_rank,tissue_name = "marrow_facs"){
-  folder_path = "/data/ruiqi/local_marker/LocalMarkerDetector/benchmark_result"
+Generate_Pseudo_gene <- function(data){
+  randseed = 233
+  set.seed(randseed)
+  seed <- sample(c(1:1e5),size=1e5)
+  
+  dat.detection = data > apply(data,2,median)
+  each.gene.detection = apply(dat.detection,1,sum)
+  
+  # sample genes based on the hist of each.gene.detection
+  xhist=hist(each.gene.detection,breaks = 1000,plot = FALSE)
+  each.gene.bin = ceiling(each.gene.detection / unique(diff(xhist$breaks)))
+  
+  # choose bins where each sample belongs to
+  samplesize=10000
+  set.seed(seed[1])
+  bins=with(xhist,sample(length(mids),samplesize,p=density,replace=TRUE))
+  
+  # sample genes based on the bins
+  gene_sub = unlist(
+    lapply(unique(bins),function(x, i){
+      set.seed(seed[i])
+      sample_num = table(bins)[which(names(table(bins)) == x)]
+      sample(names(each.gene.bin)[each.gene.bin == x])[1:sample_num]
+    }, i = 1:length(unique(bins)))
+  )
+  gene_sub = gene_sub[!is.na(gene_sub)]
+  
+  mat = data[gene_sub,]
+  pseudo_dat = do.call(rbind,purrr::map2(seq_len(nrow(mat)), seed[1:nrow(mat)], ~ {
+    set.seed(.y)
+    sample(mat[.x, ])
+  }) )
+  
+  colnames(pseudo_dat) = colnames(data)
+  rownames(pseudo_dat) = paste0("pseudo-",gene_sub)
+  
+  return(pseudo_dat)
+}
+
+quick_marker_benchmark <- function(gene_rank_vec,
+                                   folder_path = "/data/ruiqi/local_marker/LocalMarkerDetector/benchmark_result",
+                                   tissue_name = "marrow_facs"){
   max_logfc = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c1.txt"))) %>% rownames()
   celldb_marker = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c2.txt")))[,1]
   gt_list = c(lapply(seq(50,1000,50),function(x) max_logfc[1:x]),list(celldb_marker))
   names(gt_list) = c(paste0("Top",seq(50,1000,50)),"CellMarkerDB")
-  df_benchmark = data.frame(gene_rank,row.names = names(gene_rank))
+  df_benchmark = data.frame(gene_rank_vec,row.names = names(gene_rank_vec))
   
   auc_vec = do.call(c,lapply(1:length(gt_list),function(i){
     true_marker = gt_list[[i]]

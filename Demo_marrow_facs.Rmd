@@ -142,6 +142,10 @@ tic()
 lmd_result = LMD(dat, feature_space)
 toc()
 ```
+```{r}
+lmd_result = LMD(dat, feature_space, highres = TRUE, max_time = 2^7)
+```
+
 
 # Identify Gene Modules
 
@@ -398,6 +402,9 @@ mmus_s = gprofiler2::gorth(cc.genes.updated.2019$s.genes, source_organism = "hsa
 mmus_g2m = gprofiler2::gorth(cc.genes.updated.2019$g2m.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
 tiss = CellCycleScoring(tiss, s.features = mmus_s, 
                         g2m.features = mmus_g2m, set.ident = FALSE)
+tiss <- tiss %>%
+  ScaleData(verbose = FALSE, features = c(mmus_s,mmus_g2m)) %>% RunPCA(npcs = 20, verbose = FALSE, features = c(mmus_s,mmus_g2m)) %>% RunTSNE(dims = 1:20, seed.use = 42, reduction.name = "tsne_cc")
+
 cell_cycle_table = data.frame(tiss@meta.data[,c("S.Score","G2M.Score","Phase")],"Dataset" = "FACS")
 ```
 
