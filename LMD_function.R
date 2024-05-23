@@ -1,8 +1,9 @@
-cran_packages <- c("igraph","ggplot2", "cowplot", "RColorBrewer", 
-                   "data.table", "dplyr", "patchwork", 
+cran_packages <- c("igraph","ggplot2", "cowplot", "RColorBrewer", "scales",
+                   "data.table", "dplyr", "patchwork", "philentropy",
                    "pheatmap", "ggplotify", "ggraph", 
                    "ClusterR", "Rcpp", "RcppArmadillo", 
-                   "tictoc","svMisc","RSpectra","Matrix","progress","latex2exp","parallel")
+                   "tictoc","svMisc","RSpectra","Matrix","usedist","dendextend",
+                   "progress","latex2exp","parallel","dbscan","Rtsne","ggrepel", "BiocManager", "remotes")
 bioc_packages <- c("Seurat")
 sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
@@ -54,6 +55,38 @@ NumericVector fastKLVector(NumericMatrix x, NumericVector y) {
   return out;
 }
 ')
+add_newline_in_middle <- function(input_string, max_length) {
+  if (nchar(input_string) > max_length) {
+    # Find the approximate middle
+    middle <- ceiling(nchar(input_string) / 2)
+    
+    # Find the closest space to the middle
+    space_before <- regexpr(" ", substring(input_string, 1, middle), fixed = TRUE)
+    space_after <- regexpr(" ", substring(input_string, middle + 1), fixed = TRUE)
+    
+    if (space_before == -1 && space_after == -1) {
+      # No spaces found, cannot split without breaking words
+      return(input_string)
+    }
+    
+    if (space_before == -1) {
+      split_pos <- middle + space_after
+    } else if (space_after == -1) {
+      split_pos <- space_before
+    } else {
+      split_pos <- ifelse(middle - space_before < space_after, space_before, middle + space_after)
+    }
+    
+    # Insert newline at the split position
+    output_string <- paste0(
+      substring(input_string, 1, split_pos), "\n", substring(input_string, split_pos + 1)
+    )
+  } else {
+    output_string <- input_string
+  }
+  
+  return(output_string)
+}
 Rowwise_normalize <- function(x){
   x = x[rowSums(x)!=0,,drop = FALSE]
   return( sweep(x, 1, rowSums(x), FUN = "/") )
@@ -125,7 +158,7 @@ findDisconnectedComponents <- function(adj_matrix) {
   # Get the number of disconnected components
   num_components <- components$no
   # Get the corresponding nodes for each component
-  component_nodes <- split(V(g), components$membership)
+  component_nodes <- split(igraph::V(g), components$membership)
   list(number_of_components = num_components, components = component_nodes)
 }
 findShortestEdge <- function(component1, component2, data) {
@@ -148,7 +181,7 @@ Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, se
   
   # remove orphans/singletons
   res = findDisconnectedComponents(A)
-  filtered_components <- lapply(res$components, function(comp) if (length(comp) >= 5) comp else NULL)
+  filtered_components <- lapply(res$components, function(comp) if (length(comp) >= 10) comp else NULL)
   filtered_components <- Filter(Negate(is.null), filtered_components)
   filtered_node_names <- unlist(lapply(filtered_components, function(comp) names(comp)))
   A = A[rownames(A)%in%filtered_node_names,
@@ -157,7 +190,7 @@ Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, se
   # Connect Components Using MST Principles
   if(adjust_by_MST){
     while(length(filtered_components) > 1){
-      cat("Disconnected Components, adjust by MST.\n")
+      cat(length(filtered_components), " Disconnected Components, adjust by MST.\n")
       edgesToAdd <- lapply(1:(length(filtered_components)-1), function(i) {
         lapply((i + 1):length(filtered_components), function(j) {
           findShortestEdge(filtered_components[[i]], filtered_components[[j]], feature_space)
@@ -200,6 +233,9 @@ Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, se
   # W = (A + t(A))/2 # weighted
   W = pmin(A + t(A),1) # unweighted
   diag(W) = self_loop
+  if(dim(A)[1] < nrow(feature_space)){
+    cat("Remove ", nrow(feature_space) - dim(A)[1], " disconnected cells.\n")
+  }
   if(ncol(W) > 1e4){
     return(list(graph = as(W,"sparseMatrix"), adj_matrix = as(A,"sparseMatrix"), component = filtered_components))
   }else{
@@ -243,7 +279,8 @@ Obtain_Pls <- function(W, max_time){
   # P = Rowwise_normalize(W)
   # eig_res = RSpectra::eigs_sym(P, k = 1, which = "LM")
   max_step = max_time
-  P_ls = list(P)
+  # P_ls = list(P)
+  P_ls = NULL
   if(max_step < 1){
     stop("Incorrect diffusion time, no propogation")
   }else{
@@ -257,10 +294,11 @@ Obtain_Pls <- function(W, max_time){
     }
     setTxtProgressBar(pb, 100)
   }
-  names(P_ls) = 2^seq(0,t-1)
   # Add t = 0
-  P_ls = c(list(diag(nrow(W))),P_ls) 
-  names(P_ls)[1] = "0"
+  P_ls = c(list(diag(nrow(W))),P_ls)
+  # make it sparse
+  P_ls = lapply(P_ls,function(x) as(x,"sparseMatrix"))
+  names(P_ls) = c(0,2^seq(1,t-1))
   cat("\nmax diffusion time:",2^(t-1))
   return(P_ls)
 }
@@ -271,15 +309,17 @@ plot_knn_graph <- function(affinity_m, label = NULL, layout){
   
   if(!is.null(label)){
     V(g)$color <- label
-    coldef <- setNames(
-      colorRampPalette(brewer.pal(12, "Paired"))(length(unique(label))),
-      unique(label))
     p = ggraph(g,layout = layout) + 
       geom_edge_link(aes(width = weight),color = "grey") + 
       geom_node_point(aes(color = color), size = 1) + 
       scale_edge_width_continuous(range = c(0.5, 1), breaks = c(0.5, 1)) + 
-      scale_color_manual(values = coldef) +
       theme_graph()
+    if(class(label) != "numeric"){
+      coldef <- setNames(
+        colorRampPalette(brewer.pal(12, "Paired"))(length(unique(label))),
+        unique(label))
+      p = p + scale_color_manual(values = coldef)
+    }
   }else{
     p = ggraph(g,layout = layout) + 
       geom_edge_link(aes(width = weight),color = "grey") + 
@@ -388,8 +428,8 @@ fast_calculate_score_profile_largeData <- function(W, max_time = 2^15, init_stat
                                # P_t = diag(ncol(P)),
                                score_ls = score_ls)
   colnames(score_df) = paste0(colnames(score_df),"_","0")
-  pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
-                         total = floor(log(max_time,2)),
+  pb <- progress::progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
+                         total = floor(log(max_time,2)) + 1,
                          complete = "=",   # Completion bar character
                          incomplete = "-", # Incomplete bar character
                          current = ">",    # Current bar character
@@ -397,7 +437,7 @@ fast_calculate_score_profile_largeData <- function(W, max_time = 2^15, init_stat
                          width = 100)
   # state_pre = init_state
   break_flag = FALSE
-  for(t in 0:floor(log(max_time,2))){ # t here represents the exponent
+  for(t in 1:floor(log(max_time,2))){ # t here represents the exponent
     # cat("diffusion time:2^",t,"\n")
     # Automatic decide max_time by checking whether the diag of P -> 1/n
     if(!is_sparse_matrix(P) && (max(abs((ncol(P) * Matrix::diag(P)) * ncol(P) - ncol(P))) < 1e-2 * ncol(P))){
@@ -463,7 +503,7 @@ fast_calculate_score_profile_highres <- function(W, max_time = 100, init_state,
                                # P_t = diag(ncol(P)),
                                score_ls = score_ls)
   colnames(score_df) = paste0(colnames(score_df),"_","0")
-  pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
+  pb <- progress::progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
                          total = max_time,
                          complete = "=",   # Completion bar character
                          incomplete = "-", # Incomplete bar character
@@ -520,8 +560,8 @@ Calculate_outgoing_weight <- function(W, max_time = 2^15, init_state){
   P = Doubly_stochastic(W)
   cat("self-weight:",diag(P)[1],"\n")
   
-  pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
-                         total = floor(log(max_time,2)),
+  pb <- progress::progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
+                         total = floor(log(max_time,2)) + 1,
                          complete = "=",   # Completion bar character
                          incomplete = "-", # Incomplete bar character
                          current = ">",    # Current bar character
@@ -614,7 +654,7 @@ fast_get_lmds <- function(W, max_time = 2^15, init_state, P_ls = NULL, correctio
   return(list(score_profile = score_profile,cumulative_score = cumulative_score))
 }
 
-knee_point = function(Vecs){
+knee_point = function(Vecs, plot.fig = FALSE){
   Vecs = sort(Vecs)
   # calculating the distance of each point on the curve from a line drawn from the first to the last point of the curve. The point with the maximum distance is typically considered the knee point.
   curve_data = as.matrix(data.frame(x = 1:length(Vecs), y = Vecs))
@@ -629,13 +669,15 @@ knee_point = function(Vecs){
   C <- dx * line_start["y"] - dy * line_start["x"]
   distances <- abs(A * curve_data[, "x"] + B * curve_data[, "y"] + C) / norm_factor
   knee_point = which.max(distances)
-  
-  plot(Vecs,pch = 20)
-  points(knee_point,Vecs[knee_point],col='red',pch = 20)
+  if(plot.fig == TRUE){
+    plot(Vecs,pch = 20)
+    points(knee_point,Vecs[knee_point],col='red',pch = 20)
+    cat("knee_point: ", knee_point, "\n")
+  }
   return(knee_point)
 }
 LMD <- function(expression, feature_space, knn = 5, 
-                kernel = FALSE, max_time = 2^15, adjust_bridge = TRUE, self_loop = 1,
+                kernel = FALSE, max_time = 2^20, adjust_bridge = TRUE, self_loop = 1,
                 score_correction = FALSE, largeData = TRUE, highres = FALSE, min_cell = 5){
   if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
   if(kernel){
@@ -644,6 +686,7 @@ LMD <- function(expression, feature_space, knn = 5,
     W = Symmetric_KNN_graph(knn = knn, feature_space = feature_space, adjust_by_MST = adjust_bridge, self_loop = self_loop)$'graph'
   }
   rho = Rowwise_normalize(expression)
+  rho = rho[,colnames(W),drop = FALSE]
   rho = rho[which(apply(rho,1,function(x) sum(x>0) >= min_cell))
             ,,drop = FALSE] # sanity check & remove genes which express at less than 5 cells
   cat(sprintf("Remove %d genes which express at less than %d cells\n",
@@ -691,10 +734,11 @@ FeaturePlot_custom <- function(coord, value, reduction = NULL, dims = 1:2, value
   }
   if(length(value)!=nrow(coord)){stop("Unmatched Dimension!")}
   df = data.frame(cbind(coord[,1:2],value = value))
+  df[,1] = as.numeric(df[,1]); df[,2] = as.numeric(df[,2]);
   if(order_point){df = df[order(df[,3]),]}
   p <- ggplot(df, aes(x=!!as.name(colnames(coord)[1]), y=!!as.name(colnames(coord)[2]), color=value)) + 
     geom_point(size=0.5)
-  if(!is.factor(df[,3])){
+  if(is.numeric(value)){
     p <- p + scale_color_gradient(low = "lightgrey", high = "blue")
   }
   p = p + scale_x_continuous(breaks = NULL) + scale_y_continuous(breaks = NULL) +
@@ -705,7 +749,7 @@ FeaturePlot_custom <- function(coord, value, reduction = NULL, dims = 1:2, value
       axis.title.x = element_blank(),
       axis.title.y = element_blank(),
       panel.grid = element_blank(),
-      panel.background = element_blank()) + 
+      panel.background = element_blank()) +
     labs(color = value_name, title = title_name)
   return(p)
   
@@ -713,7 +757,7 @@ FeaturePlot_custom <- function(coord, value, reduction = NULL, dims = 1:2, value
 FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, check_time = NULL, gene_name = NULL, gene_color = "blue"){
   init_state = as.matrix(init_state)
   tmp <- if (!is.null(P_ls) && length(P_ls) > 0) {
-    P_ls[[1]]
+    as.matrix(P_ls[[1]])
   } else if (!is.null(W)) {
     W
   } else {
@@ -737,6 +781,7 @@ FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, chec
   check_time = check_time[check_time %in% names(P_ls)]
   sub = match(check_time,names(P_ls))
   multi_state = sapply(P_ls[sub],function(P){
+    P = as.matrix(P)
     state = fastMatMult(init_state, P)
   })
   
@@ -786,9 +831,11 @@ FeaturePlot_meta <- function(dat, coord = NULL, feature_partition, reduction = N
   }else if(is.null(coord)){
     stop("coordinate missing")
   }
+  feature_partition = feature_partition[!is.na(feature_partition)]
   feature_partition = as.factor(feature_partition)
   pl <- lapply(levels(feature_partition), function(level){
     genes = names(feature_partition)[feature_partition == level]
+    if(length(genes)==0) {return(NULL)}
     plot.title1 <- sprintf("Module %s (%d genes)",level,length(genes))
     df = data.frame(cbind(coord[colnames(dat),,drop = FALSE],
                value = apply(dat[genes,,drop = FALSE],2,mean)))
@@ -802,6 +849,7 @@ FeaturePlot_meta <- function(dat, coord = NULL, feature_partition, reduction = N
     p1
   })
   names(pl) = levels(feature_partition)
+  pl = Filter(Negate(is.null), pl)
   return(pl)
 }
 Visualize_score_pattern <- function(score_profile, genes = NULL, 
@@ -891,7 +939,7 @@ Visualize_score_pattern <- function(score_profile, genes = NULL,
   # + ylim(0,1)
   return(p)
 }
-Visualize_jaccard_mtx <- function(jaccard_mtx){
+Visualize_jaccard_mtx <- function(jaccard_mtx, threshold = 0.4){
   if(is.null(rownames(jaccard_mtx))|is.null(colnames(jaccard_mtx))){
     stop("Please define celltype names & module names")
   }
@@ -912,12 +960,21 @@ Visualize_jaccard_mtx <- function(jaccard_mtx){
       axis.title = element_blank(),
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank()
-    ) + geom_text(data = df %>% filter(value > 0.4), 
+    ) + geom_text(data = df %>% filter(value >= threshold), 
                   aes(label = sprintf("%.2f", value)), 
                   color = "white", size = 4)
   return(p)
 }
-
+findCommonPrefix <- function(strings) {
+  prefix <- strings[1]
+  for (str in strings) {
+    while (substr(str, 1, nchar(prefix)) != prefix) {
+      prefix <- substr(prefix, 1, nchar(prefix) - 1)
+      if (nchar(prefix) == 0) break
+    }
+  }
+  return(prefix)
+}
 # Obtain Gene Modules ========
 ## Calculate gene pairwise distance
 Calculate_distance <- function(dat, method){
@@ -941,6 +998,116 @@ Calculate_distance <- function(dat, method){
   return(dist)
 }
 
+Obtain_gene_partition <- function(dist, clustering_method = "average", 
+                                  min_gene = 10, deepSplit = 2, 
+                                  return_tree = FALSE, 
+                                  filtered = TRUE, accu = 0.75){
+  # check if perform hclust
+  if(clustering_method %in% c("ward.D","ward.D2","single",
+                              "complete","average","mcquitty",
+                              "median","centroid")){
+    gene_hree = hclust(dist, method = clustering_method)
+    gene_partition = dynamicTreeCut::cutreeDynamic(
+      dendro = gene_hree, 
+      distM = as.matrix(dist), deepSplit = deepSplit,
+      pamStage = TRUE, pamRespectsDendro = TRUE,
+      minClusterSize = min_gene)
+    names(gene_partition) = labels(dist)
+    gene_partition = as.factor(gene_partition)
+    # Re-name gene modules based on the order of htree
+    module_order = order(sapply(levels(gene_partition), function(mod) {
+      median(which(gene_partition[gene_hree$order] == mod))
+    }))
+    levels(gene_partition)[module_order] = seq(nlevels(gene_partition))
+    gene_partition = factor(gene_partition,levels = seq(nlevels(gene_partition)))
+    if(filtered){
+      gene_partition_filter = unlist(lapply(levels(gene_partition),function(i){
+        genes = names(gene_partition)[gene_partition == i]
+        if(length(genes) < 10){return(NULL)}
+        eig_res = eigs_sym((1 - as.matrix(dist))[genes,genes],k=1)
+        norm_eig_vec = sqrt(eig_res$values) * abs(eig_res$vectors[,1])
+        names(norm_eig_vec) = genes
+        norm_eig_vec = sort(norm_eig_vec)
+        # p = ggplot(data.frame(idx = 1:length(norm_eig_vec),norm_eigen_vec = norm_eig_vec),aes(x = idx,y = norm_eig_vec)) + geom_point() + geom_hline(yintercept = 0.5) + ylim(0,1) + theme_minimal() + ggtitle(paste0("Module",i))
+        genes_left = names(norm_eig_vec)[norm_eig_vec > 2 * accu - 1]
+        if(length(genes_left) < 10){return(NULL)}
+        else{return(genes_left)}
+      }))
+      cat("Filtering out noisy genes in each module: ", length(gene_partition_filter)," genes left.\n")
+      gene_partition[!names(gene_partition) %in% gene_partition_filter] = NA
+      gene_partition = gene_partition[!is.na(gene_partition)]
+      gene_partition <- droplevels(gene_partition)
+      # gene_partition <- addNA(gene_partition, ifany = TRUE)
+    }
+    if(return_tree){
+      return(list(gene_partition = gene_partition,gene_hree = gene_hree))
+    }
+    else{return(gene_partition)}
+  }
+  else if(clustering_method == "dbscan"){
+    set.seed(123) # For reproducibility
+    db <- dbscan::dbscan(dist, eps = 0.5)
+    # dbscan::kNNdistplot(dist, k =  20)
+    names(db$cluster) = labels(dist)
+    return(db$cluster)
+  }
+  else if(clustering_method == "hdbscan"){
+    db <- dbscan::hdbscan(dist, minPts = 5)
+    names(db$cluster) = labels(dist)
+    return(db$cluster)
+  }
+  else{
+    stop("Method not found!")
+  }
+}
+
+Visualize_gene_heatmap <- function(dist, gene_partition = NULL, gene_hree = NULL, filtered = TRUE){
+  if(is.null(gene_partition)){gene_partition = Obtain_gene_partition(dist, filtered = filtered)}
+  if(is.null(gene_hree)){gene_hree = Obtain_gene_partition(dist, return_tree = TRUE, filtered = filtered)[[2]]}
+  module_color = setNames(
+    colorRampPalette(brewer.pal(12, "Paired"))(nlevels(gene_partition)),
+    levels(gene_partition))
+  module_color[is.na(names(module_color))] = "lightgrey"
+  p = pheatmap(as.matrix(dist),
+           annotation_col = data.frame(Module = gene_partition),
+           cluster_rows = gene_hree,
+           cluster_cols = gene_hree,
+           annotation_colors = list(Module = module_color),
+           treeheight_row = 0,
+           col=colorRampPalette(c("firebrick3", "white"))(99),
+           show_colnames = FALSE, 
+           show_rownames = FALSE,
+           annotation_legend = FALSE,
+           # main = paste(distance_method,
+           #              clustering_method,sep = "-"),
+           silent = TRUE)
+  return(as.ggplot(p))
+}
+
+Visualize_gene_tsne <- function(dist, gene_partition = NULL, filtered = TRUE){
+  if(is.null(gene_partition)){gene_partition = Obtain_gene_partition(dist, filtered = filtered)}
+  set.seed(233)
+  df = data.frame(Rtsne::Rtsne(dist, is_distance = TRUE, 
+             dim = 2, perplexity = 30, max.iter = 500)$Y)
+  colnames(df) = c("tSNE_1","tSNE_2")
+  rownames(df) = labels(dist)
+  gene_partition = as.factor(gene_partition)
+  
+  df[names(gene_partition),"group"] = gene_partition
+  module_color = setNames(
+    colorRampPalette(brewer.pal(12, "Paired"))(nlevels(gene_partition)),
+    levels(gene_partition))
+  module_color[is.na(names(module_color))] = "lightgrey"
+  centroids <- df %>%
+    group_by(group) %>%
+    summarise(tSNE_1 = mean(tSNE_1), tSNE_2 = mean(tSNE_2))
+  p = ggplot(df, aes(x=tSNE_1, y=tSNE_2, color=group)) + 
+    geom_point(size=1) + scale_color_manual(values = module_color) + 
+    geom_text(data = centroids, aes(label = group), vjust = -1, color = "black") +
+    theme_minimal() + ggtitle("TSNE Visualization of Genes") + labs(color = "Modules")
+  return(p)
+}
+
 # Obtain Modules Activity Score ========
 ## Calculate Cell Module-activity score
 Obtain_cell_partition <- function(expr_dat, gene_partition, 
@@ -950,7 +1117,11 @@ Obtain_cell_partition <- function(expr_dat, gene_partition,
     stop("gene name doesn't match data")}
   
   meta_g = sapply(levels(gene_partition),function(topic){
-    colMeans(expr_dat[names(gene_partition)[gene_partition == topic],,drop = FALSE])
+    if(sum(gene_partition == topic, na.rm = TRUE) > 1){
+      return(colMeans(expr_dat[names(gene_partition)[gene_partition == topic],,drop = FALSE]))
+    }else{
+      return(NULL)
+    }
   })
   rownames(meta_g) = colnames(expr_dat)
   
@@ -1015,6 +1186,10 @@ GMM_subsampling <- function(seed, gene_partition, expr_dat, cell_kNN_graph, majo
   return(Obtain_cell_partition(expr_dat, gene_partition = sub_gene_partition, cell_kNN_graph, major_vote))
 }
 FindPC = function(srat){
+  #' How to define how many PCs based on Elbow plot
+  # https://hbctraining.github.io/scRNA-seq/lessons/elbow_plot_metric.html
+  #' The point where the principal components only contribute 5% of standard deviation and the principal components cumulatively contribute 90% of the standard deviation.
+  #' The point where the percent change in variation between the consecutive PCs is less than 0.1%.
   stdv <- srat[["pca"]]@stdev
   sum.stdv <- sum(srat[["pca"]]@stdev)
   percent.stdv <- (stdv / sum.stdv) * 100
@@ -1026,10 +1201,11 @@ FindPC = function(srat){
   min.pc <- min(co1, co2)
   return(min.pc)
 }
-AddModuleActivityScore <- function(srat, gene_partition, assay = "RNA", do_local_smooth = TRUE, knn = 10, major_vote = 5, nloop = 100){
+AddModuleActivityScore <- function(srat, gene_partition, assay = "RNA", do_local_smooth = FALSE, knn = 10, major_vote = 6, nloop = 100, module_names = NULL){
   # adjust the format of gene_partition
   gene_partition = setNames(as.character(gene_partition),names(gene_partition))
   gene_partition = gene_partition[names(gene_partition) %in% rownames(srat)]
+  gene_partition = gene_partition[!is.na(gene_partition)]
   gene_partition = as.factor(gene_partition)
   dat = srat[[assay]]@data[names(gene_partition),]
   if(do_local_smooth){
@@ -1051,7 +1227,7 @@ AddModuleActivityScore <- function(srat, gene_partition, assay = "RNA", do_local
     A = NULL
   }
   cat("Start Loop\n")
-  pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
+  pb <- progress::progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
                          total = nloop,
                          complete = "=",   # Completion bar character
                          incomplete = "-", # Incomplete bar character
@@ -1068,7 +1244,11 @@ AddModuleActivityScore <- function(srat, gene_partition, assay = "RNA", do_local
   }
   cell_block_prop = Reduce(`+`, cell_block_loop) / length(cell_block_loop)
   cell_block = cell_block_prop
-  colnames(cell_block) = paste0("Module",colnames(cell_block))
+  if(is.null(module_names) | length(module_names) != ncol(cell_block)){
+    colnames(cell_block) = paste0("Module",colnames(cell_block))
+  }else{
+    colnames(cell_block) = module_names
+  }
   srat <- AddMetaData(srat, cell_block, col.name = colnames(cell_block))
   return(srat)
 }
@@ -1115,8 +1295,8 @@ Generate_Pseudo_gene <- function(data){
 }
 
 quick_marker_benchmark <- function(gene_rank_vec,
-                                   folder_path = "/data/ruiqi/local_marker/LocalMarkerDetector/benchmark_result",
-                                   tissue_name = "marrow_facs"){
+                                   folder_path,
+                                   tissue_name){
   max_logfc = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c1.txt"))) %>% rownames()
   celldb_marker = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c2.txt")))[,1]
   gt_list = c(lapply(seq(50,1000,50),function(x) max_logfc[1:x]),list(celldb_marker))
