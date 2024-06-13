@@ -1,4 +1,4 @@
-dir.path <- "/banach1/ruiqi/local_marker/LocalMarkerDetector/"
+dir.path <- "/banach1/ruiqi/local_marker/LocalMarkerDetector"
 source(file.path(dir.path,"LMD_function.R"))
 
 # Define package lists
@@ -30,38 +30,42 @@ lapply(sample_ls, function(sample_name){
   min.pc = FindPC(srat = data_S)
   data_S <- RunUMAP(data_S, dims = 1:min.pc, seed.use = 42)
   data_S <- data_S %>% FindNeighbors() %>% FindClusters(res = 1.5)
-  data_S <- RunALRA(data_S); DefaultAssay(data_S) <- "RNA"
-  saveRDS(data_S,file = file.path(folder.path,sprintf("data_S_%s.rds",sample_name)))
+  assign(paste0("data_S_",sample_name),data_S, envir = .GlobalEnv)
 })
+
+# Trim & Re-embed data
+#' Remove mosaics from E14.5 MUT 
+sample_name = sample_ls[3]
+data_S <- get(paste0("data_S_",sample_name))
+data_S = subset(data_S, RNA_snn_res.1.5 != 16)
+data_S <- data_S %>% NormalizeData() %>% FindVariableFeatures() %>%
+  ScaleData(verbose = FALSE) %>% RunPCA(npcs = 50, verbose = FALSE)
+min.pc = FindPC(srat = data_S)
+data_S <- RunUMAP(data_S, dims = 1:min.pc, seed.use = 42)
+data_S <- data_S %>% FindNeighbors(dims = 1:min.pc) %>% 
+  FindClusters(dims = 1:min.pc, res = 1.5)
+assign(paste0("data_S_",sample_name),data_S)
 
 # Add CellType Annotation -----------
 #' Annotate based on Dkk1, Dkk2, Lef1, Sox2
-dir.path = "/banach1/ruiqi/Peggy_data/Peggy_scdata/240329_smom2"
-folder.path <- file.path(dir.path,"process_data")
-lapply(sample_ls,function(sample_name){
-  assign(paste0("data_S_",sample_name), 
-         readRDS(file.path(folder.path,sprintf("data_S_%s.rds",sample_name))),
-         envir = .GlobalEnv)
-})
 sample_name = sample_ls[1]
 data_S <- get(paste0("data_S_",sample_name))
-data_S <- FindClusters(data_S,res = 1.5)
-Idents(data_S) = data_S$RNA_snn_res.1.5
-DimPlot(data_S, group.by = "RNA_snn_res.1.5",label = TRUE)
-FeaturePlot(data_S,label = TRUE, order = TRUE, features = c("Dkk1","Lef1","Dkk2","Sox2")) & NoAxes()
+p1 = DimPlot(data_S, group.by = "RNA_snn_res.1.5",label = TRUE)
+p2 = FeaturePlot(data_S,label = TRUE, order = TRUE, features = c("Dkk1","Lef1","Dkk2","Sox2")) & NoAxes()
+p1 + p2
 # E13.5 MUT
 data_S$'celltype' = ifelse(data_S$RNA_snn_res.1.5 %in% c(11,10,13,2,4,9), "LD", 
                            ifelse(data_S$RNA_snn_res.1.5 %in% 14,"DC","UD"))
 # E13.5 CTL
 data_S$'celltype' = ifelse(data_S$RNA_snn_res.1.5 %in% c(1,2,3,4,7,9,17,12,18,19), "LD", "UD")
 # E14.5 MUT
-data_S$'celltype' = ifelse(data_S$RNA_snn_res.1.5 %in% c(2,5,13), "LD", 
-                           ifelse(data_S$RNA_snn_res.1.5 %in% c(14),"DC","UD"))
+data_S$'celltype' = ifelse(data_S$RNA_snn_res.1.5 %in% c(0,11,12), "LD", 
+                           ifelse(data_S$RNA_snn_res.1.5 %in% c(13,15),"DC","UD"))
 # E14.5 CTL
-data_S$'celltype' = ifelse(data_S$RNA_snn_res.1.5 %in% c(0,2,8,11,14) & data_S@reductions$umap@cell.embeddings[,1] < 0, "LD", 
+data_S$'celltype' = ifelse(data_S$RNA_snn_res.1.5 %in% c(0,2,8,11,13) & data_S@reductions$umap@cell.embeddings[,1] < 0, "LD", 
                            ifelse(data_S$RNA_snn_res.1.5 %in% 7,"DC","UD"))
-
 DimPlot(data_S, group.by = "celltype")
+data_S <- RunALRA(data_S); DefaultAssay(data_S) <- "RNA"
 saveRDS(data_S,file = file.path(folder.path,sprintf("data_S_%s.rds",sample_name)))
 
 # RunLMD ---------------
@@ -88,23 +92,24 @@ lapply(sample_ls,function(sample_name){
   local_gene <- readRDS(file.path(folder.path,paste0("local_gene_",sample_name,".rds")))
   dat_alra = as.matrix(data_S[["alra"]]@data)[names(local_gene$cut_off_gene),]
   dist = Calculate_distance(dat_alra, method = "jaccard")
+  saveRDS(dist, file = file.path(folder.path,paste0(sample_name,"_dist.rds")))
+  if(sample_name == sample_ls[1]){
+    deepSplit = 2}else{deepSplit = 1}
   res = Obtain_gene_partition(dist, clustering_method = "average", 
-                              deepSplit = 2, return_tree = TRUE)
+                              deepSplit = deepSplit, return_tree = TRUE)
   saveRDS(res, file = file.path(folder.path,paste0(sample_name,"_gene_tree.rds")))
   # Visualize_gene_heatmap(dist, gene_partition = res$gene_partition, gene_hree = res$gene_hree)
   Visualize_gene_tsne(dist, gene_partition = res$gene_partition)
+  pl = FeaturePlot_meta(data_S, feature_partition = res$gene_partition)
 })
 # manually merge some modules:
-lapply(sample_ls[c(2,4)],function(sample_name){
+lapply(sample_ls[4],function(sample_name){
   res = readRDS(file = file.path(folder.path,paste0(sample_name,"_gene_tree.rds")))
-  if(sample_name == sample_ls[2]){
-    levels(res$gene_partition)[levels(res$gene_partition)==23] = 22
-  }
   if(sample_name == sample_ls[4]){
     # merge wnt-modules
-    levels(res$gene_partition)[levels(res$gene_partition)==3] = 2
+    levels(res$gene_partition)[levels(res$gene_partition)==6] = 5
     # merge dc-modules
-    levels(res$gene_partition)[levels(res$gene_partition)==28] = 27
+    levels(res$gene_partition)[levels(res$gene_partition)==3] = 2
   }
   saveRDS(res, file.path(folder.path,paste0(sample_name,"_gene_tree.rds")))
 })
@@ -119,13 +124,15 @@ gene_partition_all = unlist(lapply(sample_ls,function(sample_name){
 
 cell_block_ls = lapply(sample_ls,function(sample_name){
   data_S <- get(sprintf("data_S_%s",sample_name))
+  data_S@meta.data = data_S@meta.data[,!grepl("Module",colnames(data_S@meta.data))]
   data_S = AddModuleActivityScore(data_S, gene_partition = gene_partition_all, do_local_smooth = FALSE)
-  # Obtain ModuleScore mtx & temporarily remove it from seurat metadata
+  # Obtain ModuleScore mtx
   col_id = grep("Module",colnames(data_S@meta.data))
   cell_block = data_S@meta.data[,col_id]
   cell_block
 })
 names(cell_block_ls) = sample_ls
+saveRDS(cell_block_ls, file = file.path(folder.path,"cell_block_ls.rds"))
 
 # Filter-out modules express in less than 10 cells
 modules_rename_ls = unlist( lapply(sample_ls,function(sample_name){
@@ -174,7 +181,7 @@ lapply(sample_ls,function(sample_name){
   }
 })
 
-# Calculate Jaccard Index for E13.5 mut module among different samples -------
+# Calculate Jaccard Index of E13.5 mut modules with modules from other samples -------
 modules = setNames(paste0("Module",sample_ls[1],"_",c(1,2,3,12,14,15,16)),
                    c(paste0("CC Module",1:3),"Quiescent Module","Wnt Module","DC Module", "High-Wnt Module"))
 jaccard_index_ls = lapply(sample_ls[2:4],function(sample_name){
@@ -200,14 +207,14 @@ df = do.call(rbind,lapply(names(jaccard_index_ls),function(sample_name){
 write.csv(df,file = file.path(folder.path,"module_colocalize_align.csv"),row.names = FALSE)
 
 # Rename some specific modules -------
-names(modules)[match(df$module1,modules)]
+df$'nickname' = names(modules)[match(df$module1,modules)]
 module_ls = list(
   modules,
-  setNames(paste0("Module",sample_ls[2],"_",c(16:19)),
-           c(paste0("CC Module",1:3),"Wnt Module")),
-  setNames(paste0("Module",sample_ls[3],"_",c(6)),
+  setNames(paste0("Module",sample_ls[2],"_",c(17,14,16,15)),
+           c("Wnt Module",paste0("CC Module",1:3))),
+  setNames(paste0("Module",sample_ls[3],"_",c(15)),
            "Quiescent Module"),
-  setNames(paste0("Module",sample_ls[4],"_",c(1,22)),
+  setNames(paste0("Module",sample_ls[4],"_",c(3,1)),
            c("Wnt Module","DC Module"))
 ); names(module_ls) = sample_ls[1:4]
 saveRDS(module_ls, file = file.path(folder.path,"module_ls.rds"))
@@ -302,7 +309,7 @@ lapply(sample_ls[c(1,3)],function(sample_name){
   data_S <- data_S %>% RunPCA(features = VariableFeatures(data_S)) %>% RunUMAP(dims = 1:FindPC(srat = data_S), seed.use = 42)
   data_tmp = get(paste0("data_S_",sample_name))
   data_tmp@reductions[["umap_cc_regressout"]] = data_S@reductions$umap
-  assign(paste0("data_S_",sample_name),data_tmp); rm(data_tmp)
+  assign(paste0("data_S_",sample_name),data_tmp,envir = .GlobalEnv); rm(data_tmp)
 })
 
 # Merged Cell Cycle embedding -------  

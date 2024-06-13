@@ -30,11 +30,12 @@ RunHVG <- function(srat_obj, input_genes, dir.file){
 #' SinglecellHaystack: 
 #' https://alexisvdb.github.io/singleCellHaystack/articles/examples/a02_example_scRNAseq.html
 #' Genes were ranked based on the increasing order of log(adjusted P-value)
-RunHaystack <- function(dat, feature_space, dir.file){
+RunHaystack <- function(dat, feature_space, dir.file = NULL){
   set.seed(123)
   res <- haystack(x = feature_space, expression = dat)
   marker <- show_result_haystack(res.haystack = res)
   marker[order(marker$log.p.adj),"rank"] = 1:nrow(marker)
+  if(is.null(dir.file)) return(marker)
   write.table(marker,file = dir.file,row.names = TRUE)
 }
 
@@ -103,7 +104,7 @@ result = pd.DataFrame({'escore': escores.abs().max(1), 'padj': pvals.min(1)})
 #' ## Hotspot
 #' https://hotspot.readthedocs.io/en/latest/CD4_Tutorial.html
 #' Genes were ranked by the increasing order FDR value (if two genes had the same, prioritize genes with larger Z-score).
-RunHotspot <- function(srat_obj, input_genes, feature_space, dir.file){
+RunHotspot <- function(srat_obj, input_genes, feature_space, dir.file = NULL){
   raw_count = as.matrix(srat_obj[["RNA"]]@counts)[input_genes,,drop = FALSE]
   cell_id = colnames(raw_count)
   gene_id = rownames(raw_count)
@@ -141,6 +142,7 @@ hs_results = hs.compute_autocorrelations()
     ")
   marker = reticulate::py$hs_results
   marker[order(marker$FDR),"rank"] = 1:nrow(marker)
+  if(is.null(dir.file)) return(marker)
   write.table(marker,file = dir.file,row.names = TRUE)
 }
 
@@ -161,7 +163,7 @@ RunSeuratv4 <- function(srat_obj, input_genes, feature_space, dir.file){
 
 #' Marcopolo
 #' The rank of genes is given by `Marcopolo_rank`
-RunMarcopolo <- function(srat_obj, input_genes, dir.file){
+RunMarcopolo <- function(srat_obj, input_genes, dir.file = NULL){
   raw_count = as.matrix(srat_obj[["RNA"]]@counts)[input_genes,,drop = FALSE]
   cacheEnv <- new.env()
   options("reticulate.engine.environment" = cacheEnv)
@@ -192,6 +194,7 @@ result = result.set_axis(list(adata.var.index) ,axis = 0)
                             ")
   marker = reticulate::py$result
   marker$'rank' = marker$MarcoPolo_rank + 1
+  if(is.null(dir.file)) return(marker)
   write.table(marker,file = dir.file,row.names = TRUE)
 }
 

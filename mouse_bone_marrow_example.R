@@ -207,7 +207,7 @@ df_module[,"# of Genes"] = unlist(lapply(levels(gene_partition),function(x){sum(
 df_module[,"# of Expressed Cells"] = colSums(tiss@meta.data[,paste0("Module",levels(gene_partition))] > 0.5)
 # CellType-specific modules
 jaccard_index = readRDS(file.path(folder.path,"intermediate_data",tissue_name,paste0(tissue_name,"_ct_module_jaccard.rds")))
-thred = 0.3
+thred = 0.4
 module_celltype = apply(jaccard_index,2,function(x){paste(names(which(x >= thred)),collapse = ",")})
 df_module[,"celltype"] = module_celltype[paste0("Module",levels(gene_partition))]
 # Annotate each module with Top5 significant Terms (p.adjust < 0.05)
@@ -245,7 +245,12 @@ cc_module = c(22,20,19)
 e_result = readRDS(file = file.path(folder.path,"intermediate_data",tissue_name,sprintf("%s_%s_result.rds",tissue_name,term)))
 e_result = e_result[cc_module]
 # Annotate each modules with top5 Pathway terms
-top_enrich_pathway_cc <- do.call(rbind,lapply(1:length(e_result), function(i) data.frame(e_result[[i]]@result[1:5,],module = names(e_result)[i])))
+top_enrich_pathway_cc <- do.call(rbind,lapply(1:length(e_result), function(i) data.frame(e_result[[i]]@result,module = names(e_result)[i])))
 top_enrich_pathway_cc <- top_enrich_pathway_cc[complete.cases(top_enrich_pathway_cc), ]
 top_enrich_pathway_cc = top_enrich_pathway_cc %>% filter(p.adjust < 0.05)
 write.csv(top_enrich_pathway_cc,file = file.path(folder.path, "intermediate_data",tissue_name,"reactome_pathway_cc.csv"))
+
+library(ReactomeGraph4R)
+login()
+matchObject(id = 'R-MMU-1640170')
+matchHierarchy(id = "R-MMU-1640170", type = "row")
