@@ -95,6 +95,15 @@ saveRDS(tiss,file = file.path(folder.path,paste0(tissue_name,".rds")))
 saveRDS(local_gene, file.path(folder.path,"intermediate_data",tissue_name,paste0("local_gene_",tissue_name,".rds")))
 saveRDS(res, file.path(folder.path,"intermediate_data",tissue_name,paste0(tissue_name,"_gene_tree.rds")))
 
+## Project CC modules from SmoM2 onto this embedding
+local_gene <- readRDS("/banach1/ruiqi/Peggy_data/Peggy_scdata/240329_smom2/intermediate_data/local_gene_smom2_dermal_E13.5_MUT.rds")
+gene_partition = droplevels(local_gene$gene_partition[local_gene$gene_partition %in% c(1,2,3)])
+levels(gene_partition) = paste0("smom2_",levels(gene_partition))
+tiss = AddModuleActivityScore(tiss, gene_partition = gene_partition, do_local_smooth = FALSE)
+FeaturePlot(tiss, features = paste0("Module",levels(gene_partition)), order = TRUE, reduction = "tsne", ncol = 3) & NoAxes() & 
+  scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1)) & labs(color = "ModuleScore") & NoLegend()
+FeaturePlot(tiss, features = paste0("Module",levels(gene_partition)), order = TRUE, reduction = "tsne_cc", ncol = 3) & NoAxes() & 
+  scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1)) & labs(color = "ModuleScore") & NoLegend()
 
 # Module-Celltype-alignment ---------
 # Create one-hot matrix of Cell Type

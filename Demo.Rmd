@@ -9,42 +9,29 @@ bibliography: references.bib
 # Install & Load Packages
 ```{r}
 source("LMD_function.R")
-# Define package lists
-bioc_packages <- c("clusterProfiler", "AnnotationDbi", "ReactomePA", "org.Mm.eg.db","gprofiler2")
-github_packages <- c("satijalab/seurat-wrappers");
-names(github_packages) = strsplit(github_packages, "/")[[1]][2]
-names(github_packages)[grepl("seurat-wrappers",names(github_packages))] = "SeuratWrappers"
-# Install packages
-sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
-sapply(1:length(github_packages), function(i) if (!requireNamespace(names(github_packages)[i], quietly = TRUE)) remotes::install_github(github_packages[i]))
-lapply(c(bioc_packages,names(github_packages)), require, character.only = TRUE)
+remotes::install_github("satijalab/seurat-wrappers")
+library("SeuratWrappers")
 ```
-
-# Create a folder to save results
-```{r}
-folder_path = "marrow_result"
-if (!dir.exists(path)) {
-  # If it doesn't exist, create it
-  dir.create(path)
-} else {
-}
-```
-
 # Preparing input data
 ```{r}
-# tiss <- readRDS("/banach1/ruiqi/local_marker/LMD_data/tabular_muris/marrow_facs.rds")
-```
+# Define your own dir path
+dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
 
-```{r}
-if (!file.exists('facs_Marrow_seurat_tiss.Robj')) {
+folder.path <- file.path(dir.path,"tabular_muris")
+file_name = "marrow_facs.rds"
+if (!file.exists(file.path(folder.path,file_name))) {
    # If load url doesn't work, please download it and load from your working directory
   options(timeout=6000)
   download.file("https://figshare.com/ndownloader/files/13092380",
-                destfile = 'facs_Marrow_seurat_tiss.Robj', method = 'libcurl')
- }
-load('facs_Marrow_seurat_tiss.Robj')
-tiss <- UpdateSeuratObject(tiss)
+                destfile = file.path(folder.path,file_name), method = 'libcurl')
+  tiss <- readRDS(file.path(folder.path,file_name))
+  tiss <- UpdateSeuratObject(tiss)
+  tiss <- RunALRA(tiss, assay = "RNA"); DefaultAssay(tiss) = "RNA"
+  saveRDS(tiss,file = file.path(folder.path,file_name))
+}
+tiss <- readRDS(file.path(folder.path,file_name))
 ```
+
 We obtain the following objects from this Seurat Obj:
 * `feature_space`: The output of PCA. This matrix contains the first 20 principal components (PCs).
 * `visual_space`: a data.frame with t-SNE coordinates (2D) based on the first 20 PCs.
@@ -67,25 +54,10 @@ selected_genes = (Gene_detected_count >= 10) & (Gene_detected_count <= ncol(dat)
 dat = dat[selected_genes,,drop = FALSE]
 ```
 
-```{r}
-# # save to hdf5 file
-# df = sub.srat@meta.data[,c("design_coarse","celltype1205")]
-# # BiocManager::install("rhdf5")
-# library(rhdf5)
-# h5write(dat, 'Bone_marrow_facs_mtx.h5', 'dataset')
-# fwrite(df,file = "HL234_meta.txt",row.names = TRUE)
-```
-
 # Running LMD Step by Step
-
 This provides a step-by-step tutorial for a better understanding of the algorithm. If you want to generate results directly, please skip to 'Running LMD in One Step'
 
-```{r}
-source("LMD_function.R", echo = F)
-```
-
 ## Step1: Build KNN Graph
-
 ```{r, fig.width=20}
 # Construct knn graph
 knn_result = Symmetric_KNN_graph(knn = 5, feature_space = feature_space)
@@ -98,10 +70,9 @@ plot_knn_graph(affinity_m = W, label = cell_label, layout = visual_space)
 ```
 
 ## Step2: Diffuse Genes on the cell graph
-
 ```{r, fig.width=20}
 # Generate $P^{t}, t = 2,4,8,...,max_time$
-P_ls = Obtain_Pls(W = W, max_time = 2^10)
+P_ls = Obtain_Pls(W = W, max_time = 2^20)
 # Generate initial gene distribution
 rho = Rowwise_normalize(dat[,colnames(W)])
 # Check One Gene Diffusion on Cell graph by time
@@ -110,56 +81,67 @@ print(FeaturePlot_diffusion(coord = visual_space,init_state = rho[gene,],P_ls = 
 ```
 
 ## Step3: Obtain Diffusion KL score & Cumulative score
-
+### Obtain diffusion KL score
 ```{r}
-# Obtain diffusion KL score
-score_result = fast_get_lmds(W = W, init_state = rho, P_ls = P_ls)
+score_result = fast_get_lmds(W = W, init_state = rho, P_ls = P_ls, largeData = FALSE)
+```
 
-# Check Diffusion KL pattern for several genes
+### Diffusion KL pattern for several genes
+```{r}
 genes = c("Tlr11","Fcnb","Cd79a","4933425H06Rik","Uchl4","Dock11")
 genes_label = rep(c("good","bad"),each = 3)
-Visualize_score_pattern(score_result$'score_profile', genes = genes, label_class = genes_label, facet_class = NULL)
+Visualize_score_pattern(score_result$'score_profile', genes = genes, label_class = genes_label, facet_class = NULL, text = TRUE, normalize = TRUE)
+```
 
-# Show result
-show_result_lmd(score_result,n = 10)
+### Show result
+```{r}
+res = show_result_lmd(score_result,n = 10)
+head(res$gene_table,10)
 ```
 
 # Running LMD in one step
 ```{r}
 tic()
-lmd_result = LMD(dat, feature_space)
+lmd_result = LMD(dat, feature_space, knn = 5, max_time = 2^20)
 toc()
-# lmd_result = LMD(dat, feature_space, highres = TRUE, max_time = 2^7)
+local_gene = show_result_lmd(lmd_result)
+head(local_gene$gene_table,10)
 ```
 
 # Identify Gene Modules
-
 ## Step1: Deriving Gene Modules
+### Select top localized genes based on knee point
 ```{r}
-# Select top1000 genes as local genes
-local_gene = show_result_lmd(lmd_result, n = 1000)
-local_gene = rownames(local_gene)
-
-# Denoising
-# We use ALRA @linderman2022zero to Denoise our data
-tiss <- RunALRA(tiss, assay = "RNA")
-DefaultAssay(tiss) <- "RNA"
+local_gene = show_result_lmd(lmd_result)
+local_gene = names(local_gene$cut_off_gene)
+```
+### Denoising
+We use ALRA @linderman2022zero to De-noise our data
+```{r}
+if(!"alra" %in% names(tiss@assays)){
+  tiss <- RunALRA(tiss, assay = "RNA")
+  DefaultAssay(tiss) <- "RNA"
+}
 dat_alra = as.matrix(tiss[["alra"]]@data)[local_gene,]
-
-# Calculate Gene-gene co-localization distance
+```
+### Calculate Gene-gene co-localization distance
+```{r}
 distance_method = "jaccard"
 dist = Calculate_distance(dat_alra, method = distance_method)
-
-# Obtain Gene modules
+```
+### Obtain Gene modules
+```{r}
 gene_partition = Obtain_gene_partition(dist, clustering_method = "average", min_gene = 5)
 ```
-
-### Visualize Heatmap
+### Visualize
 ```{r}
 p = Visualize_gene_heatmap(dist)
 ```
 
 ## Step2: Computing Per-Cell Module Activity Scores
 ```{r}
-tiss = AddModuleActivityScore(tiss, gene_partition = gene_partition, do_local_smooth = TRUE)
+tiss = AddModuleActivityScore(tiss, gene_partition = gene_partition, do_local_smooth = FALSE)
+
+FeaturePlot(tiss, features = paste0("Module",levels(gene_partition)), order = TRUE, reduction = "tsne", ncol = 3) & NoAxes() & 
+  scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1)) & labs(color = "ModuleScore") & NoLegend()
 ```

@@ -182,7 +182,7 @@ lapply(sample_ls,function(sample_name){
 })
 
 # Calculate Jaccard Index of E13.5 mut modules with modules from other samples -------
-modules = setNames(paste0("Module",sample_ls[1],"_",c(1,2,3,12,14,15,16)),
+modules = setNames(paste0("Module",sample_ls[1],"_",c(1,3,2,12,14,15,16)),
                    c(paste0("CC Module",1:3),"Quiescent Module","Wnt Module","DC Module", "High-Wnt Module"))
 jaccard_index_ls = lapply(sample_ls[2:4],function(sample_name){
   data_S = get(paste0("data_S_",sample_name))
@@ -210,7 +210,7 @@ write.csv(df,file = file.path(folder.path,"module_colocalize_align.csv"),row.nam
 df$'nickname' = names(modules)[match(df$module1,modules)]
 module_ls = list(
   modules,
-  setNames(paste0("Module",sample_ls[2],"_",c(17,14,16,15)),
+  setNames(paste0("Module",sample_ls[2],"_",c(17,14,15,16)),
            c("Wnt Module",paste0("CC Module",1:3))),
   setNames(paste0("Module",sample_ls[3],"_",c(15)),
            "Quiescent Module"),
@@ -318,7 +318,7 @@ s.genes = gorth(cc.genes.updated.2019$s.genes, source_organism = "hsapiens", tar
 g2m.genes = gorth(cc.genes.updated.2019$g2m.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
 genes_CC = c(s.genes,g2m.genes)
 
-### Merge MUT & CTL
+# Merge MUT & CTL
 data_S = lapply(sample_ls[1:2],function(sample_name){
   get(paste0("data_S_",sample_name))
 })
@@ -327,19 +327,22 @@ data_S$'type' = ifelse(data_S$old.ident == "E13_SmoM2","E13.5_SmoM2","E13.5_WT")
 data_S <- data_S %>% NormalizeData() %>% 
   FindVariableFeatures() %>% 
   ScaleData(verbose = FALSE, features = rownames(data_S))
-data_S <- data_S  %>% 
+# Top2000 HVGs
+data_S <- data_S %>% 
   RunPCA(npcs = 50, verbose = FALSE, features = VariableFeatures(data_S))
+ndims = FindPC(data_S)
 data_S <- data_S %>%
-  RunUMAP(dims = 1:FindPC(srat = data_S), seed.use = 42, reduction.name = "umap_hvg")
+  RunUMAP(dims = 1:ndims, seed.use = 42, reduction.name = "umap_hvg")
+# CC genes
 data_S <- data_S  %>% 
   RunPCA(npcs = 50, verbose = FALSE, features = genes_CC)
 data_S <- data_S %>%
   RunUMAP(dims = 1:FindPC(srat = data_S), seed.use = 42, reduction.name = "umap_cc")
+
 data_S <- DietSeurat(
-  data_S, assays = "RNA", dimreducs = c("umap_hvg","umap_cc")
+  data_S, assays = "RNA", dimreducs = c("umap_hvg","umap_cc","pca")
 )
 saveRDS(data_S, file = file.path(dir.path,"process_data","data_S_smom2_dermal_E13.5.rds"))
-
 
 # Wnt level -------
 sample_name = sample_ls[1]
@@ -348,13 +351,14 @@ modules = modules[grepl("DC|Wnt",names(modules))]
 modules = modules[c(1,3,2)]
 data_S = get(paste0("data_S_",sample_name))
 data_S$'wnt_related_module' = "Other"
-thred = 0.4
+thred = 0.5
 for(m in names(modules)){
   data_S$'wnt_related_module' = ifelse(data_S@meta.data[,modules[m]] > thred, m, data_S$'wnt_related_module')
 }
 genes = "Lef1"
 df = FetchData(data_S, vars = c(genes, "wnt_related_module"))
 df$Phase = data_S$Phase; 
+df$wnt_related_module_fullname = modules[df$wnt_related_module]
 df = cbind(df,data_S@meta.data[,modules])
 write.csv(df,file = file.path(folder.path,"e13_smom2_wnt_level_table.csv"))
 
@@ -365,12 +369,12 @@ modules = modules[grepl("Quie",names(modules))]
 data_S = get(paste0("data_S_",sample_name))
 genes = c("Cdkn1a","Lef1")
 df = FetchData(data_S, vars = c(genes, modules))
-thred = 0.4
-df$status = ifelse(data_S@meta.data[,modules] > thred, names(modules), 
-                   ifelse(df$Cdkn1a > mean(df$Cdkn1a), "Cdkn1a+", "Cdkn1a-"))
+thred = 0.5
+df$status = ifelse(data_S@meta.data[,modules] > thred,paste0(modules,"+"),paste0(modules,"-"))
+df$status = ifelse(df$Cdkn1a > median(df$Cdkn1a),paste0(df$status,"Cdkn1a+"),paste0(df$status,"Cdkn1a-"))
 write.csv(df,file = file.path(folder.path,"e13_smom2_cdkn1a_table.csv"))
 
-# Proportion of CC-phase in each module --------
+# Proportion of CC-phase in each module
 # proportions_df <- df %>%
 #   group_by(wnt_related_module) %>%
 #   summarise(

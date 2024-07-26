@@ -384,7 +384,7 @@ fast_calculate_score_profile <- function(W, max_time = 2^15,
   # Calculate multi-scale KL divergence
   score_df = do.call(cbind,lapply(1:length(P_ls),function(i){
     P = P_ls[[i]]
-    state = fastMatMult(init_state, P)
+    state = fastMatMult(init_state, as.matrix(P))
     score_df = get_score_profile(state_0 = init_state,
                                  state_t = state,
                                  state_inf = final_state,
@@ -854,11 +854,14 @@ FeaturePlot_meta <- function(dat, coord = NULL, feature_partition, reduction = N
 }
 Visualize_score_pattern <- function(score_profile, genes = NULL, 
                                     label_class = NULL, facet_class = NULL, 
-                                    add_point = NULL, dyadic = TRUE, text = FALSE){
+                                    add_point = NULL, dyadic = TRUE, text = FALSE, normalize = FALSE){
   score_df = score_profile
   if(!all(genes %in% rownames(score_df))){stop("Genes not found!")}
   profiles = names(which(table(sub("_\\d+", "", colnames(score_df)))>1))
   score_df = score_df[genes,]
+  if(("score0" %in% profiles) & normalize){
+    score_df = score_df/score_df$'max_score0'
+  }
   score_df$'gene' = rownames(score_df)
   score_df$'label' = score_df$'gene'
   score_df$'facet' = NA
@@ -896,7 +899,8 @@ Visualize_score_pattern <- function(score_profile, genes = NULL,
   }
   if(!is.null(label_class)){
     p = ggplot(data = df, mapping = aes(x = step, y = score, color = label, linetype = profiles)) + 
-      geom_line(aes(group = interaction(gene,profiles))) + labs(x = "Time", y = "Normalized Diffusion KL Score")
+      geom_line(aes(group = interaction(gene,profiles))) + 
+      labs(x = "Time", y = "Normalized Diffusion KL Score") + theme_half_open() + background_grid()
     if(text == TRUE){
       p = p +
         geom_text(data = df %>% group_by(interaction(gene,profiles)) %>% slice_head(n = 4) %>% slice_tail(n = 1),
@@ -905,7 +909,8 @@ Visualize_score_pattern <- function(score_profile, genes = NULL,
 
   }else{
     p = ggplot(data = df, mapping = aes(x = step, y = score, color = gene, linetype = profiles)) + 
-      geom_line(aes(group = interaction(gene,profiles))) + labs(x = "Time", y = "Normalized Diffusion KL Score")
+      geom_line(aes(group = interaction(gene,profiles))) + 
+      labs(x = "Time", y = "Normalized Diffusion KL Score") + theme_half_open() + background_grid()
   }
   if(!is.null(add_point)){
     add_point = x_breaks[as.character(add_point)]
@@ -1185,13 +1190,13 @@ GMM_subsampling <- function(seed, gene_partition, expr_dat, cell_kNN_graph, majo
   sub_gene_partition = setNames(sub_gene_partition$gene_partition,sub_gene_partition$gene_name)
   return(Obtain_cell_partition(expr_dat, gene_partition = sub_gene_partition, cell_kNN_graph, major_vote))
 }
-FindPC = function(srat){
+FindPC = function(srat, reduction = "pca"){
   #' How to define how many PCs based on Elbow plot
   # https://hbctraining.github.io/scRNA-seq/lessons/elbow_plot_metric.html
   #' The point where the principal components only contribute 5% of standard deviation and the principal components cumulatively contribute 90% of the standard deviation.
   #' The point where the percent change in variation between the consecutive PCs is less than 0.1%.
-  stdv <- srat[["pca"]]@stdev
-  sum.stdv <- sum(srat[["pca"]]@stdev)
+  stdv <- srat[[reduction]]@stdev
+  sum.stdv <- sum(srat[[reduction]]@stdev)
   percent.stdv <- (stdv / sum.stdv) * 100
   cumulative <- cumsum(percent.stdv)
   co1 <- which(cumulative > 90 & percent.stdv < 5)[1]
