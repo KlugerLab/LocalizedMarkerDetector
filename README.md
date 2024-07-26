@@ -4,7 +4,7 @@ LMD is a computational framework designed for the identification of gene express
 
 ## Get Started
 
-[Get started with LMD](https://github.com/ruiqi0130/LocalMarkerDetector/blob/main/Demo_marrow_facs.Rmd) by exploring our mouse bone marrow example.
+[Get started with LMD](https://github.com/ruiqi0130/LocalMarkerDetector/blob/main/Demo.Rmd) by exploring our mouse bone marrow example.
 
 ## Files
 
