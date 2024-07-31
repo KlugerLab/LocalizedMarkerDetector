@@ -1180,7 +1180,7 @@ ggsave(filename = file.path(figure_path, "fig-smom2_1c.png"), plot = p, width = 
 # Fig - SmoM2-fig2
 ```{r}
 modules = module_ls$smom2_dermal_E13.5_MUT["Quiescent Module"]
-thred = 0.5
+# thred = 0.5
 pl = lapply(sample_ls, function(sample_name){
   cat(sample_name,"\n")
   data_S = get(paste0("data_S_",sample_name))
@@ -1195,11 +1195,11 @@ pl = lapply(sample_ls, function(sample_name){
     #   cc_count = table(data_S$Phase[data_S@meta.data[,modules] > thred])
     #   p2 = p2 + labs(subtitle = sprintf("%d Active Cells \n (%d in G1, %d in G2M, %d in S)",sum(cc_count), cc_count["G1"],cc_count["G2M"],cc_count["S"]))
     # }
-    list(p1,p2)
+    list(p1 + theme(aspect.ratio = 0.89),p2 + theme(aspect.ratio = 0.9))
   })
   }else{
     FeaturePlot(data_S, features = modules, order = TRUE, reduction = "umap") + NoAxes() + 
-    scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1)) + labs(title = "", color = "ModuleScore")
+    scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1)) + labs(title = "", color = "ModuleScore") + theme(aspect.ratio = 0.9)
   }
 })
 pl = do.call(c,lapply(pl,function(p){
@@ -1209,7 +1209,7 @@ pl = do.call(c,lapply(pl,function(p){
     list(p)
   }
 }))
-p = wrap_plots(pl,nrow = 2) + plot_layout(guides = "collect")
+p = wrap_plots(pl,nrow = 2,widths = c(0.88,1,0.88,1,1)) + plot_layout(guides = "collect")
 ggsave(filename = file.path(figure_path, "fig-smom2_2a.png"), plot = p, width = 3*5+3, height = 2*3 + 1)
 ```
 ## Supfig-Cdkn1a+ Lef1 level

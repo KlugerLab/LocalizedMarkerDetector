@@ -17,7 +17,7 @@ sample_ls = unlist(lapply(c("E13.5", "E14.5"),function(i) paste0(i,"_", c("MUT",
 sample_ls = paste0("smom2_dermal_",sample_ls)
 for(i in sample_ls){
   assign(paste0("data_S_",i), 
-         readRDS(sprintf("/data/rq25/peggy_10x_mouse_smom2_202112/seurat_analysis/result/data/data_S_peggy_%s.rds",i)))
+         readRDS(sprintf("/banach1/ruiqi/Peggy_data/peggy_10x_mouse_smom2_202112/seurat_analysis/result/data/data_S_peggy_%s.rds",i)))
 }
 # Preprocess ------------
 dir.path = "/banach1/ruiqi/Peggy_data/Peggy_scdata/240329_smom2"
