@@ -5,7 +5,8 @@ sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) 
 lapply(c(cran_packages,bioc_packages), require, character.only = TRUE)
 
 # Download/Load Data ===========
-dir.path <- "/banach1/ruiqi/local_marker"
+dir.path0 <- "/banach1/ruiqi/local_marker"
+dir.path <- dir.path0
 consortium = "tabular_muris"
 folder.path <- file.path(dir.path,"LMD_data",consortium)
 dir.create(folder.path, recursive=T)
@@ -32,7 +33,7 @@ for(tissue_name in names(tissue_download_link)){
 consortium = "tabular_muris"
 tissue_name = names(tissue_download_link)[1]
 
-dir.path <- "/banach1/ruiqi/local_marker"
+dir.path <- dir.path0
 folder.path <- file.path(dir.path,"LMD_data",consortium)
 tiss <- readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
 DefaultAssay(tiss) <- "RNA"
@@ -45,7 +46,7 @@ selected_genes = names(selected_genes)[selected_genes]
 dat = dat[selected_genes,,drop = FALSE]
 
 # Run Each Method and save results ========
-dir.path <- "/banach1/ruiqi/local_marker"
+dir.path <- dir.path0
 source(file.path(dir.path,"LocalMarkerDetector","benchmark","run_methods_function.R"))
 folder.path = file.path(dir.path,"LMD_data","benchmark",consortium)
 dir.create(folder.path, recursive = T)
@@ -92,7 +93,7 @@ write.table(df_runtime,file = file.path(folder.path, paste0(tissue_name,"_runtim
 #' take the maximum value among the N-1 fold change values, 
 #' given N cell types.
 #' 
-dir.path <- "/banach1/ruiqi/local_marker"
+dir.path <- dir.path0
 folder.path <- file.path(dir.path,"LMD_data",consortium,"ground_truth_geneset")
 dir.create(folder.path, recursive=T)
 file_name = paste0(tissue_name,"_ground_truth_c1.txt")
@@ -142,7 +143,7 @@ if(!file.exists(file.path(folder.path,file_name))){
 }
 
 # Load Rank Table ==========
-dir.path <- "/banach1/ruiqi/local_marker"
+dir.path <- dir.path0
 folder.path.rank <- file.path(dir.path,"LMD_data","benchmark",consortium)
 method_ls = c("lmd","hvg", "wilcox_no_filter",
               "haystack","hotspot","semi","marcopolo")
@@ -186,7 +187,7 @@ unlist(lapply(method_ls,function(method){
 }))
 
 # Density Index ========
-dir.path <- "/banach1/ruiqi/local_marker"
+dir.path = dir.path0
 for(tissue_name in names(tissue_download_link)[1:3]){
 tiss <- readRDS(file.path(dir.path,"LMD_data",consortium,paste0(tissue_name,".rds")))
 folder.path.rank <- file.path(dir.path,"LocalMarkerDetector","benchmark",consortium)

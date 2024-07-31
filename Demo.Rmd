@@ -15,7 +15,7 @@ library("SeuratWrappers")
 # Preparing input data
 ```{r}
 # Define your own dir path
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path <- file.path(dir.path0,"LMD_data")
 
 folder.path <- file.path(dir.path,"tabular_muris")
 file_name = "marrow_facs.rds"

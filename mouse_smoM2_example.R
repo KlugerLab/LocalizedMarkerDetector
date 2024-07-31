@@ -1,5 +1,6 @@
-dir.path <- "/banach1/ruiqi/local_marker/LocalMarkerDetector"
-source(file.path(dir.path,"LMD_function.R"))
+dir.path0 <- "/banach1/ruiqi/local_marker"
+dir.path1 = "/banach1/ruiqi/Peggy_data/Peggy_scdata/240329_smom2"
+source(file.path(dir.path0,"LocalMarkerDetector","LMD_function.R"))
 
 # Define package lists
 bioc_packages <- c("clusterProfiler", "AnnotationDbi", "ReactomePA", "org.Mm.eg.db",
@@ -13,14 +14,15 @@ sapply(1:length(github_packages), function(i) if (!requireNamespace(names(github
 lapply(c(bioc_packages,names(github_packages)), require, character.only = TRUE)
 
 # Load Data --------------------
+dir.path = dir.path1
+folder.path <- file.path(dir.path,"raw_data","preprocess_data")
 sample_ls = unlist(lapply(c("E13.5", "E14.5"),function(i) paste0(i,"_", c("MUT", "CTL"))))
 sample_ls = paste0("smom2_dermal_",sample_ls)
 for(i in sample_ls){
   assign(paste0("data_S_",i), 
-         readRDS(sprintf("/banach1/ruiqi/Peggy_data/peggy_10x_mouse_smom2_202112/seurat_analysis/result/data/data_S_peggy_%s.rds",i)))
+         readRDS(file.path(folder.path,sprintf("data_S_%s_v0.rds",i))))
 }
-# Preprocess ------------
-dir.path = "/banach1/ruiqi/Peggy_data/Peggy_scdata/240329_smom2"
+# Process ------------
 folder.path <- file.path(dir.path,"process_data")
 dir.create(folder.path, recursive=T)
 lapply(sample_ls, function(sample_name){
@@ -28,13 +30,14 @@ lapply(sample_ls, function(sample_name){
   data_S <- data_S %>% NormalizeData() %>% FindVariableFeatures() %>%
     ScaleData(verbose = FALSE) %>% RunPCA(npcs = 50, verbose = FALSE)
   min.pc = FindPC(srat = data_S)
+  cat("# of PC used: ", min.pc, "\n")
   data_S <- RunUMAP(data_S, dims = 1:min.pc, seed.use = 42)
   data_S <- data_S %>% FindNeighbors() %>% FindClusters(res = 1.5)
   assign(paste0("data_S_",sample_name),data_S, envir = .GlobalEnv)
 })
 
 # Trim & Re-embed data
-#' Remove mosaics from E14.5 MUT 
+#' Remove mosaics from E14.5 MUT
 sample_name = sample_ls[3]
 data_S <- get(paste0("data_S_",sample_name))
 data_S = subset(data_S, RNA_snn_res.1.5 != 16)

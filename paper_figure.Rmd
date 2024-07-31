@@ -13,14 +13,16 @@ library("patchwork")
 library("ggplot2")
 library("ggsignif")
 source("LMD_function.R", echo = F)
-figure_path = "/banach1/ruiqi/local_marker/LMD_data/figures"
+dir.path0 = "/banach1/ruiqi/local_marker"
+dir.path1 = "/banach1/ruiqi/Peggy_data/Peggy_scdata/240329_smom2"
+figure_path = file.path(dir.path0, "LMD_data","figures")
 dir.create(figure_path,recursive = TRUE)
 setwd(figure_path)
 ```
 
 # SupFig - Bone Marrow Cell Embedding
 ```{r}
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path <- file.path(dir.path0,"LMD_data")
 consortium = "tabular_muris"
 folder.path <- file.path(dir.path,consortium)
 tissue_name = "marrow_facs"
@@ -42,7 +44,7 @@ ggsave(filename = file.path(figure_path,"supfig-bonemarrow.png"), plot = p, widt
 # Fig - Pipeline
 ```{r}
 source("LMD_function.R", echo = F)
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path <- file.path(dir.path0,"LMD_data")
 consortium = "tabular_muris"
 folder.path <- file.path(dir.path,consortium)
 tissue_name = "marrow_facs"
@@ -85,7 +87,7 @@ method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_no_filter","
 method_fullname = setNames(c("LMD","singleCellHaystack","Hotspot","Marcopolo","SEMITONES","Seurat v4","HVGs"),method_ls)
 ```
 ```{r}
-dir.path <- "/banach1/ruiqi/local_marker"
+dir.path <- dir.path0
 consortium = "tabular_muris"
 tissue_name = "marrow_facs"
 folder.path = file.path(dir.path, "LMD_data","benchmark")
@@ -253,7 +255,7 @@ write.csv(df_runtime, file = file.path(folder.path,"RunTime_table.csv"), row.nam
 
 # Fig - Gene Ranking Comparisons between LMD and Other Methods
 ```{r}
-dir.path <- "/banach1/ruiqi/local_marker"
+dir.path <- dir.path0
 consortium = "tabular_muris"
 tissue_name = "marrow_facs"
 df_benchmark = read.table(file.path(dir.path, "LocalMarkerDetector","benchmark", consortium, paste0(tissue_name,"_benchmark_rank_table.csv")),header = TRUE)
@@ -448,7 +450,7 @@ coldef = setNames(
 
 ```{r}
 consortium = "tabular_muris"
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path <- file.path(dir.path0,"LMD_data")
 pl = lapply(c("marrow_facs","lung_facs","pancreas_facs"),function(tissue_name){
 score_measure = read.table(file.path(dir.path,"benchmark",consortium,paste0(tissue_name,"_DI.csv")),header = TRUE)
 score_measure$Method = ifelse(score_measure$Method %in% names(method_fullname),method_fullname[score_measure$Method],score_measure$Method)
@@ -625,7 +627,7 @@ source("LMD_function.R", echo = F)
 # celltype_color = setNames(colorRampPalette(brewer.pal(9, "Set1"))(length(unique(cell_label))),unique(cell_label))
 consortium = "tabular_muris"
 tissue_name = "marrow_facs"
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path <- file.path(dir.path0,"LMD_data")
 folder.path = file.path(dir.path,consortium)
 dist = readRDS(file.path(folder.path,"intermediate_data",tissue_name,paste0(tissue_name,"_gene_dist.rds")))
 res = readRDS(file.path(folder.path,"intermediate_data",tissue_name,paste0(tissue_name,"_gene_tree.rds")))
@@ -670,7 +672,7 @@ ggsave(filename = file.path(figure_path,"supfig-obtainmodule.png"), plot = p, wi
 ```{r}
 consortium = "tabular_muris"
 tissue_name = "marrow_facs"
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path <- file.path(dir.path0,"LMD_data")
 folder.path = file.path(dir.path,consortium)
 
 one_hot_matrix <- 
@@ -798,7 +800,7 @@ ggsave(filename = file.path(figure_path,"supfig-ct-specific-module.png"), plot =
 ```{r}
 consortium = "tabular_muris"
 tissue_name = "marrow_facs"
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path <- file.path(dir.path0,"LMD_data")
 folder.path = file.path(dir.path,consortium)
 res = readRDS(file.path(folder.path,"intermediate_data",tissue_name,paste0(tissue_name,"_gene_tree.rds")))
 tiss = readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
@@ -970,7 +972,7 @@ sample_full_name = setNames(c("E13.5 SmoM2",
 
 ```
 ```{r}
-dir.path = "/banach1/ruiqi/Peggy_data/Peggy_scdata/240329_smom2"
+dir.path = dir.path1
 lapply(sample_ls,function(sample_name){
   assign(paste0("data_S_",sample_name), 
          readRDS(file.path(dir.path,"process_data",sprintf("data_S_%s.rds",sample_name))),

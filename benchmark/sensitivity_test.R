@@ -5,7 +5,8 @@ sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) 
 lapply(c(cran_packages,bioc_packages), require, character.only = TRUE)
 
 # Load Data =======
-dir.path <- "/banach1/ruiqi/local_marker/"
+dir.path0 <- "/banach1/ruiqi/local_marker"
+dir.path <- dir.path0
 consortium = "tabular_muris"
 tissue_name = "marrow_facs"
 tiss <- readRDS(file.path(dir.path,"LMD_data",consortium,paste0(tissue_name,".rds")))

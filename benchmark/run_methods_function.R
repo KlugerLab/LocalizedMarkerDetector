@@ -11,8 +11,8 @@ sapply(github_packages, function(pkg) if (!requireNamespace(strsplit(pkg, "/")[[
 lapply(c(cran_packages), require, character.only = TRUE)
 
 #' LMD: Genes were ranked by the increasing order of Cumulative Diffusion-KL score
-dir.path <- "/banach1/ruiqi/local_marker/LocalMarkerDetector"
-source(file.path(dir.path,"LMD_function.R"))
+dir.path0 <- "/banach1/ruiqi/local_marker"
+source(file.path(dir.path0,"LocalMarkerDetector","LMD_function.R"))
 RunLMD <- function(dat, feature_space, dir.file){
   res = LMD(dat,feature_space,max_time = 2^20,knn = 5)
   marker = show_result_lmd(res)$'gene_table'

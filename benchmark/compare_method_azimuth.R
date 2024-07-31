@@ -5,7 +5,8 @@ sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) 
 lapply(c(cran_packages,bioc_packages), require, character.only = TRUE)
 
 # Download/Load Data ===========
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path0 <- "/banach1/ruiqi/local_marker"
+dir.path <- file.path(dir.path0,"LMD_data")
 consortium = "azimuth"
 folder.path <- file.path(dir.path,consortium)
 dir.create(folder.path, recursive=T)
@@ -35,7 +36,7 @@ consortium = "azimuth"
 tissue_name = names(tissue_download_link)[1]
 
 for(tissue_name in names(tissue_download_link)){
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path <- file.path(dir.path0,"LMD_data")
 folder.path <- file.path(dir.path,consortium)
 tiss <- readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
 DefaultAssay(tiss) <- "RNA"
@@ -76,7 +77,7 @@ dat = dat[selected_genes,,drop = FALSE]
 # anndata::write_h5ad(tiss_adata, file.path(folder_path,gsub(".rds",".h5ad",file_name)))
 
 # Run Each Method and save results ========
-dir.path <- "/banach1/ruiqi/local_marker/LocalMarkerDetector/"
+dir.path <- file.path(dir.path0,"LocalMarkerDetector")
 source(file.path(dir.path,"benchmark","run_methods_function.R"))
 folder.path = file.path(dir.path,"benchmark",consortium)
 dir.create(folder.path, recursive = T)
@@ -122,7 +123,7 @@ write.table(df_runtime,file = file.path(folder.path, paste0(tissue_name,"_runtim
 #' take the maximum value among the N-1 fold change values, 
 #' given N cell types.
 #' 
-dir.path <- "/banach1/ruiqi/local_marker/LMD_data"
+dir.path <- file.path(dir.path0,"LMD_data")
 folder.path <- file.path(dir.path,consortium,"ground_truth_geneset")
 dir.create(folder.path, recursive=T)
 file_name = paste0(tissue_name,"_ground_truth_c1.txt")
@@ -168,7 +169,7 @@ if(!file.exists(file.path(folder.path,file_name))){
 }
 
 # Load Rank Table ==========
-dir.path <- "/banach1/ruiqi/local_marker"
+dir.path <- dir.path0
 folder.path.rank <- file.path(dir.path,"LMD_data","benchmark",consortium)
 
 df_benchmark = lapply(method_ls, function(method){
