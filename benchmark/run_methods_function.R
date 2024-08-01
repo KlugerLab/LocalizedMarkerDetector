@@ -207,3 +207,25 @@ RunSeuratv4_filter <- function(srat_obj, input_genes, feature_space, dir.file){
   marker <- merge(marker,gene_rank,by = "gene")
   write.table(marker,file = dir.file, row.names = TRUE)
 }
+
+quick_marker_benchmark <- function(gene_rank_vec,
+                                   folder_path,
+                                   tissue_name){
+  max_logfc = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c1.txt"))) %>% rownames()
+  celldb_marker = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c2.txt")))[,1]
+  gt_list = c(lapply(seq(50,1000,50),function(x) max_logfc[1:x]),list(celldb_marker))
+  names(gt_list) = c(paste0("Top",seq(50,1000,50)),"CellMarkerDB")
+  df_benchmark = data.frame(gene_rank_vec,row.names = names(gene_rank_vec))
+  
+  auc_vec = do.call(c,lapply(1:length(gt_list),function(i){
+    true_marker = gt_list[[i]]
+    df_benchmark$"gt" = 0
+    df_benchmark[true_marker,"gt"] = 1
+    
+    library(pROC)
+    roc = roc(df_benchmark$gt, df_benchmark[,1], direction = ">")
+    as.numeric(auc(roc))
+  }))
+  names(auc_vec) = names(gt_list)
+  return(auc_vec)
+}

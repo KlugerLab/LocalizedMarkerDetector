@@ -258,7 +258,7 @@ write.csv(df_runtime, file = file.path(folder.path,"RunTime_table.csv"), row.nam
 dir.path <- dir.path0
 consortium = "tabular_muris"
 tissue_name = "marrow_facs"
-df_benchmark = read.table(file.path(dir.path, "LocalMarkerDetector","benchmark", consortium, paste0(tissue_name,"_benchmark_rank_table.csv")),header = TRUE)
+df_benchmark = read.table(file.path(dir.path, "LMD_data","benchmark", consortium, paste0(tissue_name,"_benchmark_rank_table.csv")),header = TRUE)
 rownames(df_benchmark) = df_benchmark$gene
 tiss = readRDS(file.path(dir.path, "LMD_data",consortium, paste0(tissue_name,".rds")))
 method_vs = "lmd"
@@ -274,7 +274,7 @@ df_label_all = df_benchmark[unique(sub),c(method_vs,method_vs_set)]
 # df_label_all$'legend' = sapply(seq(nrow(df_label_all)),function(i){
 #   paste(paste(method_fullname[colnames(df_label_all)],df_label_all[i,],sep = ":"),collapse = "\n")
 # })
-g = c("Cd19","Naaa","Mogat2","Tifa","Abca13","Zf12","Il2rb","Phgdh","Vpreb2","Fyb")
+g = c("Cd19","Naaa","Mogat2","Grina","Abca13","Zf12","Il2rb","Phgdh","Vpreb2","Fyb")
 names(g) = rep(method_vs_set,each = 2)
 pl = lapply(1:length(g),function(i){
   x = g[i]

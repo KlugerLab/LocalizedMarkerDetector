@@ -8,8 +8,15 @@ bioc_packages <- c("Seurat")
 sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
 lapply(c(cran_packages,bioc_packages), require, character.only = TRUE)
+# Main Function For LMD: 
+# Construct Graph: Symmetric_KNN_graph, plot_knn_graph
+# Diffusion score: Obtain_Pls, Rowwise_normalize, FeaturePlot_diffusion, fast_get_lmds, Visualize_score_pattern, LMD, show_result_lmd, 
+# Gene modules: Calculate_distance, Obtain_gene_partition, Visualize_gene_heatmap
+# Cell module score: AddModuleActivityScore
 
+# ========================
 # Mtx operation===========
+# ========================
 # Enable C++11
 Sys.setenv("PKG_CXXFLAGS"="-std=c++11")
 # Create the C++ function
@@ -55,39 +62,9 @@ NumericVector fastKLVector(NumericMatrix x, NumericVector y) {
   return out;
 }
 ')
-add_newline_in_middle <- function(input_string, max_length) {
-  if (nchar(input_string) > max_length) {
-    # Find the approximate middle
-    middle <- ceiling(nchar(input_string) / 2)
-    
-    # Find the closest space to the middle
-    space_before <- regexpr(" ", substring(input_string, 1, middle), fixed = TRUE)
-    space_after <- regexpr(" ", substring(input_string, middle + 1), fixed = TRUE)
-    
-    if (space_before == -1 && space_after == -1) {
-      # No spaces found, cannot split without breaking words
-      return(input_string)
-    }
-    
-    if (space_before == -1) {
-      split_pos <- middle + space_after
-    } else if (space_after == -1) {
-      split_pos <- space_before
-    } else {
-      split_pos <- ifelse(middle - space_before < space_after, space_before, middle + space_after)
-    }
-    
-    # Insert newline at the split position
-    output_string <- paste0(
-      substring(input_string, 1, split_pos), "\n", substring(input_string, split_pos + 1)
-    )
-  } else {
-    output_string <- input_string
-  }
-  
-  return(output_string)
-}
 Rowwise_normalize <- function(x){
+  # x: matrix to be rowwise normalized
+  
   x = x[rowSums(x)!=0,,drop = FALSE]
   return( sweep(x, 1, rowSums(x), FUN = "/") )
 }
@@ -149,7 +126,27 @@ Doubly_stochastic <- function(W){
   }
 }
 
+FindPC = function(srat, reduction = "pca"){
+  #' Define how many PCs based on Elbow plot
+  # https://hbctraining.github.io/scRNA-seq/lessons/elbow_plot_metric.html
+  #' The point where the principal components only contribute 5% of standard deviation and the principal components cumulatively contribute 90% of the standard deviation.
+  #' The point where the percent change in variation between the consecutive PCs is less than 0.1%.
+  stdv <- srat[[reduction]]@stdev
+  sum.stdv <- sum(srat[[reduction]]@stdev)
+  percent.stdv <- (stdv / sum.stdv) * 100
+  cumulative <- cumsum(percent.stdv)
+  co1 <- which(cumulative > 90 & percent.stdv < 5)[1]
+  co2 <- sort(which((percent.stdv[1:length(percent.stdv) - 1] - 
+                       percent.stdv[2:length(percent.stdv)]) > 0.1), 
+              decreasing = T)[1] + 1
+  min.pc <- min(co1, co2)
+  return(min.pc)
+}
+
+# =========================================
 # Build Cell Graph & Transition Mtx =======
+# =========================================
+
 findDisconnectedComponents <- function(adj_matrix) {
   # Create a graph from the adjacency matrix
   g <- igraph::graph_from_adjacency_matrix(adj_matrix, mode = "undirected")
@@ -170,6 +167,11 @@ findShortestEdge <- function(component1, component2, data) {
 }
 
 Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, self_loop = 1){
+  # knn: knn for constructing the graph
+  # fearure_space: cell x coordinate (e.g. 20PCs) matrix
+  # adjust_by_MST: TRUE for connecting disconnected components by Minimum Spanning Trees
+  # self-loop: weight for self connect (default 1)
+  
   cat("Constructing KNN graph\n")
   knn_list <- FNN::get.knn(feature_space, k = knn, algorithm = "kd_tree")
   Idx = knn_list$nn.index
@@ -272,6 +274,10 @@ Symmetric_gaussian_graph <- function(knn = 5, feature_space, alpha = 1, coef = 2
 }
 
 Obtain_Pls <- function(W, max_time){
+  # Calculate $P^{t}, t = 2,4,8,...,max_time$
+  # W: Symmetry affinity matrix of kNN graph
+  # max_time: the maximum diffusion time (The real maximum diffusion time may be shorter if all genes converge beforehand)
+  
   cat("Create a list of diffusion operator\n")
   pb <- txtProgressBar(min = 0, max = 100, style = 3)
   P = Doubly_stochastic(W)
@@ -303,6 +309,10 @@ Obtain_Pls <- function(W, max_time){
   return(P_ls)
 }
 plot_knn_graph <- function(affinity_m, label = NULL, layout){
+  # affinity_m: Symmetry affinity matrix of kNN graph
+  # label: Node label
+  # layout: 2D coordinate of cells for visualization
+  
   layout <- as.matrix(layout)
   g <- graph_from_adjacency_matrix(affinity_m, 'undirected', weighted = TRUE)
   V(g)$frame.color <- NA
@@ -334,7 +344,10 @@ plot_knn_graph <- function(affinity_m, label = NULL, layout){
   return(p)
 }
 
+# =====================================
 # Calculating Diffusion score =========
+# =====================================
+
 ## Define a series of score_profile
 get_score_profile <- function(state_0 = NULL, state_t = NULL, state_inf = NULL, P_diag_t = NULL,
                               score_ls = c("score0","delta_correction")){
@@ -637,6 +650,14 @@ obtain_lmds = function(score_profile, correction = FALSE){
 
 # combine fast_calculate_score_profile & obtain_lmds in one step
 fast_get_lmds <- function(W, max_time = 2^15, init_state, P_ls = NULL, correction = FALSE, largeData = TRUE, highres = FALSE){
+  # W: affinity matrix
+  # max_time: the maximum diffusion time (The real maximum diffusion time may be shorter if all genes converge beforehand)
+  # init_state: Row-wise normalized expression matrix
+  # P_ls: Diffused transition matrix
+  # correction: TRUE for correcting LMD profile for geometry of the graph (Default FALSE)
+  # largeData: TRUE for effective large matrix multiplication (Default TRUE)
+  # highres: TRUE for NOT downsampling the diffusion step; otherwise, downsample it dyadically (Default FALSE).
+  
   if(highres){
     score_profile = fast_calculate_score_profile_highres(W = W, max_time = max_time, 
                                                            init_state = init_state)
@@ -679,6 +700,18 @@ knee_point = function(Vecs, plot.fig = FALSE){
 LMD <- function(expression, feature_space, knn = 5, 
                 kernel = FALSE, max_time = 2^20, adjust_bridge = TRUE, self_loop = 1,
                 score_correction = FALSE, largeData = TRUE, highres = FALSE, min_cell = 5){
+  # expression: gene x cell expression matrix
+  # fearure_space: cell x coordinate (e.g. 20PCs) matrix
+  # knn: knn for constructing the graph
+  # kernel: TRUE for using Gaussian Kernal, o/w using kNN binarized graph
+  # max_time: the maximum diffusion time (The real maximum diffusion time may be shorter if all genes converge beforehand)
+  # adjust_bridge: TRUE for connecting disconnected components of graph by Minimum Spanning Trees
+  # self-loop: weight for self connect (default 1)
+  # score_correction: TRUE for correcting LMD profile for geometry of the graph (Default FALSE)
+  # largeData: TRUE for effective large matrix multiplication (Default TRUE)
+  # highres: TRUE for NOT downsampling the diffusion step; otherwise, downsample it dyadically (Default FALSE).
+  # min_cell: remove genes expressing in less than k cells (default k = 5)
+  
   if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
   if(kernel){
     W = Symmetric_gaussian_graph(knn = knn, feature_space = feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = self_loop)$'graph'
@@ -698,17 +731,53 @@ LMD <- function(expression, feature_space, knn = 5,
                       highres = highres)
   return(res)
 }
-show_result_lmd <- function(res.lmd, n = length(res.lmd$cumulative_score)){
+show_result_lmd <- function(res.lmd){
+  # res.lmd: output of LMD (LMD profile)
   score = res.lmd$cumulative_score
   score = sort(score)
   df = data.frame(score = score)
   df$'rank' = 1:nrow(df)
-  # print(head(df,n = n))
+  # print(head(df,n = 10))
   gene_rank = setNames(df$'rank',rownames(df))
   return(list(gene_table = df, gene_rank = gene_rank, cut_off_gene = gene_rank[1:knee_point(score)]))
 }
 
+# =======================
 # Visualization =========
+# =======================
+add_newline_in_middle <- function(input_string, max_length) {
+  if (nchar(input_string) > max_length) {
+    # Find the approximate middle
+    middle <- ceiling(nchar(input_string) / 2)
+    
+    # Find the closest space to the middle
+    space_before <- regexpr(" ", substring(input_string, 1, middle), fixed = TRUE)
+    space_after <- regexpr(" ", substring(input_string, middle + 1), fixed = TRUE)
+    
+    if (space_before == -1 && space_after == -1) {
+      # No spaces found, cannot split without breaking words
+      return(input_string)
+    }
+    
+    if (space_before == -1) {
+      split_pos <- middle + space_after
+    } else if (space_after == -1) {
+      split_pos <- space_before
+    } else {
+      split_pos <- ifelse(middle - space_before < space_after, space_before, middle + space_after)
+    }
+    
+    # Insert newline at the split position
+    output_string <- paste0(
+      substring(input_string, 1, split_pos), "\n", substring(input_string, split_pos + 1)
+    )
+  } else {
+    output_string <- input_string
+  }
+  
+  return(output_string)
+}
+
 FeaturePlot_custom <- function(coord, value, reduction = NULL, dims = 1:2, value_name = NULL,title_name = NULL,order_point = TRUE){
   if(class(coord) == "Seurat"){
     if(is.character(value)){
@@ -755,6 +824,14 @@ FeaturePlot_custom <- function(coord, value, reduction = NULL, dims = 1:2, value
   
 }
 FeaturePlot_diffusion <- function(coord, init_state, P_ls = NULL, W = NULL, check_time = NULL, gene_name = NULL, gene_color = "blue"){
+  # coord: 2D coordinate of cells for visualization
+  # init_state: Row-wise normalized expression matrix
+  # P_ls: Diffused transition matrix
+  # W: Symmetry affinity matrix of kNN graph
+  # check_time: Select several time point for visualization, e.g. c(2,16,128)
+  # gene_name: Select one gene for visualization
+  # gene_color: The color of expression level for visualization
+  
   init_state = as.matrix(init_state)
   tmp <- if (!is.null(P_ls) && length(P_ls) > 0) {
     as.matrix(P_ls[[1]])
@@ -855,6 +932,15 @@ FeaturePlot_meta <- function(dat, coord = NULL, feature_partition, reduction = N
 Visualize_score_pattern <- function(score_profile, genes = NULL, 
                                     label_class = NULL, facet_class = NULL, 
                                     add_point = NULL, dyadic = TRUE, text = FALSE, normalize = FALSE){
+  # score_profile: LMD score profile, output of fast_get_lmds
+  # genes: selected genes for visualization
+  # label_class: gene class label
+  # facet_class: gene facet label (visualize genes in different panels)
+  # add_point: highlight several time points
+  # dyadic: TRUE for represent the axis text in a 2^ format
+  # text: TRUE for add gene labels to each curve
+  # normalize: TRUE for normalize LMD profile by the plateau
+  
   score_df = score_profile
   if(!all(genes %in% rownames(score_df))){stop("Genes not found!")}
   profiles = names(which(table(sub("_\\d+", "", colnames(score_df)))>1))
@@ -980,9 +1066,15 @@ findCommonPrefix <- function(strings) {
   }
   return(prefix)
 }
+
+# ============================
 # Obtain Gene Modules ========
+# ============================
+
 ## Calculate gene pairwise distance
 Calculate_distance <- function(dat, method){
+  # dat: expression matrix
+  # method: metric for measuring gene-gene distance (option: pearson, euclidean, KL, jaccard, spearman)
   rho_dat = Rowwise_normalize(dat)
   if(method == "pearson"){
     cor = cor(t(rho_dat), use = "pairwise.complete.obs", method = "pearson")
@@ -1007,6 +1099,14 @@ Obtain_gene_partition <- function(dist, clustering_method = "average",
                                   min_gene = 10, deepSplit = 2, 
                                   return_tree = FALSE, 
                                   filtered = TRUE, accu = 0.75){
+  # dist: gene-gene dist
+  # clustering_method: method for clustering the genes (option for hclust: average, ward.D, ward.D2, single, complete, mcquitty, median, centroid)
+  # min_gene: number of gene each group should at least contain
+  # deepSplit: parameters for cutreeDynamic
+  # return_tree: TRUE to return a gene partition tree; o/w return only the gene partition
+  # filtered: TRUE for filtering out some genes for each partition by SML@parisi2014ranking
+  # accu: threshold for filtering out genes
+  
   # check if perform hclust
   if(clustering_method %in% c("ward.D","ward.D2","single",
                               "complete","average","mcquitty",
@@ -1113,7 +1213,10 @@ Visualize_gene_tsne <- function(dist, gene_partition = NULL, filtered = TRUE){
   return(p)
 }
 
+# ======================================
 # Obtain Modules Activity Score ========
+# ======================================
+
 ## Calculate Cell Module-activity score
 Obtain_cell_partition <- function(expr_dat, gene_partition, 
                                   cell_kNN_graph = NULL, major_vote = 5){
@@ -1190,23 +1293,17 @@ GMM_subsampling <- function(seed, gene_partition, expr_dat, cell_kNN_graph, majo
   sub_gene_partition = setNames(sub_gene_partition$gene_partition,sub_gene_partition$gene_name)
   return(Obtain_cell_partition(expr_dat, gene_partition = sub_gene_partition, cell_kNN_graph, major_vote))
 }
-FindPC = function(srat, reduction = "pca"){
-  #' How to define how many PCs based on Elbow plot
-  # https://hbctraining.github.io/scRNA-seq/lessons/elbow_plot_metric.html
-  #' The point where the principal components only contribute 5% of standard deviation and the principal components cumulatively contribute 90% of the standard deviation.
-  #' The point where the percent change in variation between the consecutive PCs is less than 0.1%.
-  stdv <- srat[[reduction]]@stdev
-  sum.stdv <- sum(srat[[reduction]]@stdev)
-  percent.stdv <- (stdv / sum.stdv) * 100
-  cumulative <- cumsum(percent.stdv)
-  co1 <- which(cumulative > 90 & percent.stdv < 5)[1]
-  co2 <- sort(which((percent.stdv[1:length(percent.stdv) - 1] - 
-                       percent.stdv[2:length(percent.stdv)]) > 0.1), 
-              decreasing = T)[1] + 1
-  min.pc <- min(co1, co2)
-  return(min.pc)
-}
 AddModuleActivityScore <- function(srat, gene_partition, assay = "RNA", do_local_smooth = FALSE, knn = 10, major_vote = 6, nloop = 100, module_names = NULL){
+  # srat: seurat object
+  # gene_partition: gene modules
+  # assay: asssay used for calculated modulescore
+  # do_local_smooth: TRUE for smooth the module score for each cell by its neighborhoods
+  # knn: neighborhoods size for local smoothing
+  # major_vote: majority vote number for local smoothing
+  # nloop: number of sampling
+  # module_names: prefix name for each gene module
+  
+  
   # adjust the format of gene_partition
   gene_partition = setNames(as.character(gene_partition),names(gene_partition))
   gene_partition = gene_partition[names(gene_partition) %in% rownames(srat)]
@@ -1258,8 +1355,10 @@ AddModuleActivityScore <- function(srat, gene_partition, assay = "RNA", do_local
   return(srat)
 }
 
+# =======================================
+# Miscellaneous Test Function =============
+# =======================================
 
-# Test Function =============
 Generate_Pseudo_gene <- function(data){
   randseed = 233
   set.seed(randseed)
