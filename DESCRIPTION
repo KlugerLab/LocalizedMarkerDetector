@@ -1,0 +1,62 @@
+Package: LMD
+Title: Local Marker Detector
+Version: 1.0.0
+Authors@R: 
+    c(person(given = "Ruiqi",
+           family = "Li",
+           role = c("aut", "cre"),
+           email = "ruiqi.li@yale.edu",
+           comment = c(ORCID = "YOUR-ORCID-ID")),
+    person(given = "Rihao",
+           family = "Qu",
+           role = c("aut", "ctb"),
+           email = "rihao.qu@yale.edu",
+           comment = c(ORCID = "YOUR-ORCID-ID")),
+    person(given = "Francesco",
+           family = "Strino",
+           role = c("aut", "ctb"),
+           email = "francesco.strino@pcmgf.com",
+           comment = c(ORCID = "YOUR-ORCID-ID")))
+Description: Local marker detector.
+License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a license
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Depends: 
+    R (>= 4.0)
+Imports:
+  Seurat (>= 4.0),
+  SeuratObject,
+  Matrix (>= 1.5),
+  igraph,
+  ggplot2, 
+  cowplot, 
+  RColorBrewer, 
+  scales,
+  data.table, 
+  dplyr, 
+  patchwork, 
+  philentropy,
+  pheatmap, 
+  ggplotify, 
+  ggraph, 
+  Rcpp, 
+  RcppArmadillo, 
+  tictoc,
+  svMisc,
+  RSpectra,
+  usedist,
+  dendextend,
+  progress,
+  latex2exp,
+  parallel,
+  dbscan,
+  Rtsne,
+  ggrepel, 
+  BiocManager, 
+  remotes
+Suggests: 
+  knitr,
+  rmarkdown
+VignetteBuilder: knitr

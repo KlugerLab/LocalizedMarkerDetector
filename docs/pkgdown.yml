@@ -1,0 +1,6 @@
+pandoc: 2.11.4
+pkgdown: 2.1.0.9000
+pkgdown_sha: 502c3e2ce0df6c7236d87098637073eaba61c5f4
+articles:
+  Example: Example.html
+last_built: 2024-08-03T23:19Z

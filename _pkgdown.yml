@@ -1,0 +1,43 @@
+reference:
+  - title: "Cell Graphs"
+    desc: >
+      Construct cell graphs
+    contents:
+      - '`Symmetric_KNN_graph`'
+      - '`plot_knn_graph`'
+  - title: "Diffusion Score"
+    desc: >
+      Calculate and visualize diffusion scores.
+    contents:
+      - '`FeaturePlot_diffusion`'
+  - title: "Gene Modules"
+    desc: >
+      Identify gene modules
+    contents:
+      - '`Calculate_distance`'
+  - title: "Cell Modules"
+    desc: >
+      Define cell module score based on the identifies gene modules.
+    contents:
+      - '`AddModuleActivityScore`'
+
+navbar:
+  structure:
+    left:
+    - home
+    - intro
+    - reference
+    - articles
+    - tutorials
+    - news
+    right: github
+  components:
+    home:
+      icon: fa-home fa-lg
+      href: index.html
+    reference:
+      text: Reference
+      href: reference/index.html
+    intro:
+      text: Get started
+      href: articles/Example.html

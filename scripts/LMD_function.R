@@ -168,7 +168,7 @@ findShortestEdge <- function(component1, component2, data) {
 
 Symmetric_KNN_graph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, self_loop = 1){
   # knn: knn for constructing the graph
-  # fearure_space: cell x coordinate (e.g. 20PCs) matrix
+  # feature_space: cell x coordinate (e.g. 20PCs) matrix
   # adjust_by_MST: TRUE for connecting disconnected components by Minimum Spanning Trees
   # self-loop: weight for self connect (default 1)
   
