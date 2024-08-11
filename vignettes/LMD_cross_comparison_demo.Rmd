@@ -1,0 +1,123 @@
+---
+title: "Application: Cross-sample Comparison"
+author: "Ruiqi Li, Rihao Qu, Francesco Strino"
+date: "08/20/2024"
+output: rmarkdown::html_vignette
+bibliography: references.bib
+vignette: >
+  %\VignetteIndexEntry{Application: Cross-sample Comparison}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Loading Data
+One of the downstream tasks for LMD is cross-sample comparison to identify sample-enriched or shared cell populations without the need for integration and differential abundance testing. Here we use a 10x mouse embryonic skin
+dataset. The processing step can be found [here](https://github.com/ruiqi0130/LocalizedMarkerDetector/blob/main/LMD-paper/analysis/mouse_smoM2_example_process_from_10x.R).
+
+```{r, warning = FALSE, message=FALSE}
+##### Load required R libraries
+library("LocalizedMarkerDetector")
+library("ggplot2")
+library("Seurat")
+library("SeuratWrappers")
+library("patchwork")
+```
+
+This dataset includes a SmoM2 mutant sample with a paired wildtype sample, both collected at embryonic day 13.5. We can visualize these two samples using UMAP, with cells color-coded by cell types.
+```{r load_data, fig.height=3, fig.width=6, warning = FALSE, message=FALSE}
+##### Load Data
+source("../LMD-paper/paths.R")
+data_S_MUT <- readRDS(file.path(dir.path0,"smom2/process_data/data_S_smom2_dermal_E13.5_MUT.rds"))
+data_S_CTL <- readRDS(file.path(dir.path0,"smom2/process_data/data_S_smom2_dermal_E13.5_CTL.rds"))
+
+p1 = DimPlot(data_S_MUT, 
+          group.by = "celltype", shuffle = TRUE, cols = c("DC"="#d1495b", "UD" = "#edae49", "LD" = "#d3d3d3")) + ggtitle("Mutant") & NoAxes()
+p2 = DimPlot(data_S_CTL, 
+          group.by = "celltype", shuffle = TRUE, cols = c("DC"="#d1495b", "UD" = "#edae49", "LD" = "#d3d3d3")) + ggtitle("Wildtype") & NoAxes()
+p1 + p2 + plot_layout(guides = "collect")
+```
+
+# Running LMD and Identifying localized gene modules
+
+Next, we run LMD and identify gene modules on the mutant sample.
+```{r, warning = FALSE, message=FALSE}
+#### Prepare data
+dat = as.matrix(data_S_MUT[["RNA"]]@data)
+# Keep genes express > 10 cells and less than 50% of cells
+Gene_detected_count <- apply(dat > apply(dat,2,median),1,sum)
+selected_genes = names(Gene_detected_count)[(Gene_detected_count >= 10) & (Gene_detected_count <= ncol(dat) * 0.5)]
+dat = dat[selected_genes,,drop = FALSE]
+# Extract top 14 PCs (# of PC based on Elbow Plot)
+feature_space = Embeddings(data_S_MUT[["pca"]])[,1:FindPC(data_S_MUT)]
+```
+```{r, warning = FALSE, message=FALSE}
+##### RunLMD
+lmd_score_res = LMD(dat, feature_space, max_time = 2^20)
+
+res = show_result_lmd(lmd_score_res)
+```
+```{r, warning = FALSE, message=FALSE}
+##### Identify Gene Modules
+if(!"alra" %in% names(data_S_MUT@assays)){
+  data_S_MUT <- RunALRA(data_S_MUT, assay = "RNA")
+  DefaultAssay(data_S_MUT) <- "RNA"
+}
+dat_alra = as.matrix(data_S_MUT[["alra"]]@data)[names(res$cut_off_gene),]
+dist = CalculateGeneDistance(dat_alra, method = "jaccard")
+
+gene_partition = ClusterGenes(dist, clustering_method = "average", deepSplit = 2)
+levels(gene_partition) = 1:nlevels(gene_partition)
+table(gene_partition)
+```
+
+# Computing module activity scores for both mutant and wildtype samples
+
+Next, we calculate the module activity score for each module in both the mutant and wildtype samples.
+
+**Note**: This step is CPU-intensive and may take 4 to 5 minutes to complete. 
+
+```{r, warning = FALSE, message=FALSE}
+data_S_MUT = AddModuleActivityScore(data_S_MUT, gene_partition = gene_partition)
+data_S_CTL = AddModuleActivityScore(data_S_CTL, gene_partition = gene_partition)
+```
+
+Then we can visualize the expression patterns of gene modules across both samples.
+
+## Modules reflecting functional similar cell populations between mutant and WT
+
+Here we show two modules that are localized in both mutant and wildtype. 
+
+```{r shared_module, fig.height=6, fig.width=6, warning = FALSE, message=FALSE}
+library(ggplotify)
+pl = lapply(c("Module1","Module16"), function(module_name){
+  pl = lapply(c("MUT","CTL"), function(i){
+    FeaturePlot(get(paste0("data_S_",i)), features = c(module_name), order = TRUE) + ggtitle(i) & labs(color = "ModuleScore") & NoAxes()
+  })
+  p = as.ggplot(wrap_plots(pl, nrow = 1) + plot_layout(guides = "collect") + plot_annotation(title = module_name))
+})
+p = wrap_plots(pl,ncol = 1)
+p
+```
+
+## Modules reflecting mutant-enriched cell populations
+
+Here we show two modules that are only localized in mutant and dispersed in wildtype.
+
+```{r specific_module, fig.height=6, fig.width=6, warning = FALSE, message=FALSE}
+pl = lapply(c("Module14","Module17"), function(module_name){
+  pl = lapply(c("MUT","CTL"), function(i){
+    FeaturePlot(get(paste0("data_S_",i)), features = c(module_name), order = TRUE) + ggtitle(i) & labs(color = "ModuleScore") & NoAxes()
+  })
+  p = as.ggplot(wrap_plots(pl, nrow = 1) + plot_layout(guides = "collect") + plot_annotation(title = module_name))
+})
+p = wrap_plots(pl,ncol = 1)
+p
+```
+

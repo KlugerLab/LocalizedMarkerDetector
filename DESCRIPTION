@@ -1,5 +1,5 @@
-Package: LMD
-Title: Local Marker Detector
+Package: LocalizedMarkerDetector
+Title: Localized Marker Detector
 Version: 1.0.0
 Authors@R: 
     c(person(given = "Ruiqi",
@@ -20,15 +20,16 @@ Authors@R:
 Description: Local marker detector.
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a license
 Encoding: UTF-8
+URL: https://ruiqi0130.github.io/LocalizedMarkerDetector/, https://github.com/ruiqi0130/LocalizedMarkerDetector
 LazyData: true
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.2
 Depends: 
     R (>= 4.0)
 Imports:
   Seurat (>= 4.0),
   SeuratObject,
-  Matrix (>= 1.5),
+  Matrix (>= 1.6),
   igraph,
   ggplot2, 
   cowplot, 
@@ -41,7 +42,8 @@ Imports:
   pheatmap, 
   ggplotify, 
   ggraph, 
-  Rcpp, 
+  ClusterR (>= 1.3),
+  Rcpp (>= 0.12.16),
   RcppArmadillo, 
   tictoc,
   svMisc,
@@ -56,6 +58,7 @@ Imports:
   ggrepel, 
   BiocManager, 
   remotes
+LinkingTo: Rcpp, RcppArmadillo
 Suggests: 
   knitr,
   rmarkdown

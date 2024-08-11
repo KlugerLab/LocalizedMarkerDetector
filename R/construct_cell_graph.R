@@ -1,0 +1,223 @@
+# =========================================
+# Construct Cell Graph ====================
+# =========================================
+# Extrinsic Function: ConstructKnnGraph, ConstructGaussianGraph, ConstructDiffusionOperators
+
+findDisconnectedComponents <- function(adj_matrix) {
+  # Create a graph from the adjacency matrix
+  g <- igraph::graph_from_adjacency_matrix(adj_matrix, mode = "undirected")
+  # Find the connected components
+  components <- igraph::components(g)
+  # Get the number of disconnected components
+  num_components <- components$no
+  # Get the corresponding nodes for each component
+  component_nodes <- split(igraph::V(g), components$membership)
+  list(number_of_components = num_components, components = component_nodes)
+}
+findShortestEdge <- function(component1, component2, data) {
+  # Calculate all pairwise distances between nodes in the two components
+  distances <- outer(component1, component2, Vectorize(function(x, y) dist(data[c(x,y), ])))
+  # Find the minimum distance and the corresponding nodes
+  min_distance_idx <- which(distances == min(distances), arr.ind = TRUE)
+  return(c(component1[min_distance_idx[1]], component2[min_distance_idx[2]]))
+}
+
+#' Construct a Symmetric KNN graph
+#'
+#' Constructs a symmetric KNN graph from a given feature space.
+#'
+#' @param knn integer; the number of nearest neighbors to consider for constructing the graph. Default is 5.
+#' @param feature_space matrix; a cell-by-coordinate matrix (e.g., 20 principal components).
+#' @param adjust_by_MST boolean; TRUE for connecting disconnected components using Minimum Spanning Trees (MST). Default is TRUE.
+#' @param self_loop integer; weight for self connections (default is 1).
+#'
+#' @return A list containing the following elements:
+#' \describe{
+#'   \item{graph}{matrix; symmetric KNN graph W, computed as \code{pmax(1, (A + A^T) / 2)}.}
+#'   \item{adj_matrix}{matrix; adjacency matrix A.}
+#'   \item{component}{list; disconnected components in the graph, each component is represented as a subgraph.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' feature_space <- matrix(rnorm(200), nrow = 10, ncol = 20)
+#' result <- ConstructKnnGraph(knn = 3, feature_space = feature_space)
+#' graph <- result$graph
+#' adj_matrix <- result$adj_matrix
+#' }
+#' @export
+ConstructKnnGraph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, self_loop = 1){
+  cat("Constructing KNN graph\n")
+  knn_list <- FNN::get.knn(feature_space, k = knn, algorithm = "kd_tree")
+  Idx = knn_list$nn.index
+  A = Matrix::sparseMatrix(i = rep(1:nrow(Idx),each = knn),
+                           j = c(t(Idx)),
+                           dims = c(nrow(Idx), nrow(Idx)),
+                           x = 1)
+  rownames(A) = colnames(A) = rownames(feature_space)
+  
+  # remove orphans/singletons
+  res = findDisconnectedComponents(A)
+  filtered_components <- lapply(res$components, function(comp) if (length(comp) >= 10) comp else NULL)
+  filtered_components <- Filter(Negate(is.null), filtered_components)
+  filtered_node_names <- unlist(lapply(filtered_components, function(comp) names(comp)))
+  A = A[rownames(A)%in%filtered_node_names,
+        colnames(A)%in%filtered_node_names]
+  
+  # Connect Components Using MST Principles
+  if(adjust_by_MST){
+    while(length(filtered_components) > 1){
+      cat(length(filtered_components), " Disconnected Components, adjust by MST.\n")
+      edgesToAdd <- lapply(1:(length(filtered_components)-1), function(i) {
+        lapply((i + 1):length(filtered_components), function(j) {
+          findShortestEdge(filtered_components[[i]], filtered_components[[j]], feature_space)
+        })
+      })
+      edgesToAdd = do.call(rbind.data.frame, lapply(unlist(edgesToAdd, recursive = FALSE),function(x) names(x))) %>% distinct()
+      for (i in 1:nrow(edgesToAdd)) {
+        A[edgesToAdd[i,1],edgesToAdd[i,2]] = 1
+      }
+      res = findDisconnectedComponents(A)
+      filtered_components = res$components
+    }
+  }
+  
+  # if(adjust){ # increase knn if containing disconnected components
+  #   while(length(filtered_components) >= 2){
+  #     knn = knn + 1
+  #     knn_list <- FNN::get.knn(feature_space, k = knn, algorithm = "kd_tree")
+  #     Idx = knn_list$nn.index
+  #     # Adjacency matrix
+  #     A = Matrix::sparseMatrix(i = rep(1:nrow(Idx),each = knn),
+  #                              j = c(t(Idx)),
+  #                              dims = c(nrow(Idx), nrow(Idx)),
+  #                              x = 1)
+  #     rownames(A) = colnames(A) = rownames(feature_space)
+  #     res = findDisconnectedComponents(A)
+  #     filtered_components <- lapply(res$components, function(comp) if (length(comp) >= 5) comp else NULL)
+  #     filtered_components <- Filter(Negate(is.null), filtered_components)
+  #   }
+  #   print(paste0("Final kNN: ",knn))
+  # }
+  
+  if (length(filtered_components) >= 2) {
+    stop("Disconnected Components, Please increase knn or adjust by MST.")
+  }
+  
+  A = as.matrix(A)
+  diag(A) = self_loop
+  # Graph affinity matrix by symmetrize the adjacency mtx
+  # W = (A + t(A))/2 # weighted
+  W = pmin(A + t(A),1) # unweighted
+  diag(W) = self_loop
+  if(dim(A)[1] < nrow(feature_space)){
+    cat("Remove ", nrow(feature_space) - dim(A)[1], " disconnected cells.\n")
+  }
+  if(ncol(W) > 1e4){
+    return(list(graph = as(W,"sparseMatrix"), adj_matrix = as(A,"sparseMatrix"), component = filtered_components))
+  }else{
+    return(list(graph = W, adj_matrix = A, component = filtered_components))
+  }
+}
+
+
+#' Construct a Symmetric Gaussian Graph
+#'
+#' Constructs a Gaussian kernel graph from a given feature space.
+#'
+#' @param knn integer; the number of nearest neighbors to consider for each node. Default is 5.
+#' @param feature_space matrix; a cell-by-coordinate matrix (e.g., 20 principal components)
+#' @param alpha numeric; the exponent in the Gaussian kernel computation. Default is 1.
+#' @param coef numeric; used to compute the adaptive bandwidth. Default is 2.
+#' @param epsilon numeric; threshold below which edge weights are set to zero to sparsify the graph. Default is 1e-3.
+#' @param self_loop numeric; value for the diagonal elements of the affinity matrix to add self-loops. Default is 1.
+#'
+#' @return A list containing the following elements:
+#' \describe{
+#'   \item{graph}{A symmetric matrix representing the graph affinity matrix.}
+#'   \item{adj_matrix}{A binary adjacency matrix indicating the presence of edges between nodes.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' feature_space <- matrix(rnorm(100), nrow = 10)
+#' result <- ConstructGaussianGraph(knn = 3, feature_space = feature_space)
+#' graph <- result$graph
+#' adj_matrix <- result$adj_matrix
+#' }
+#' 
+#' @keywords internal
+#' 
+#' @export
+ConstructGaussianGraph <- function(knn = 5, feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = 1){
+  cat("Constructing Gaussian kernel\n")
+  node_num = nrow(feature_space)
+  knn_list <- FNN::get.knn(feature_space, k = node_num - 1, algorithm = "kd_tree")
+  Idx = knn_list$nn.index
+  
+  # Gaussian Kernel transfer
+  knn_dist = knn_list$nn.dist
+  bandwidth = coef * (knn_dist[,knn])^2 # adaptive bandwidth
+  knn_dist = (knn_dist^2 / bandwidth)^alpha
+  knn_dist = exp(-knn_dist)
+  knn_dist[knn_dist < epsilon] = 0 # make graph sparse
+  
+  A = Matrix::sparseMatrix(i = rep(1:node_num,each = ncol(Idx)),
+                           j = c(t(Idx)),
+                           dims = c(node_num, node_num),
+                           x = c(t(knn_dist)))
+  rownames(A) = colnames(A) = rownames(feature_space)
+  A = as.matrix(A)
+  diag(A) = self_loop
+  
+  # Graph affinity matrix (by default graph is connected)
+  W = (A + t(A))/2
+  A = W > 0
+  
+  return(list(graph = W,adj_matrix = A))
+}
+
+#' Construct Diffusion Operators
+#'
+#' Constructs a list of diffusion operators for a given symmetry affinity matrix of a graph.
+#'
+#' @param W matrix; symmetric affinity matrix of the graph.
+#' @param max_time integer; the maximum diffusion time. The actual maximum diffusion time may be shorter if all nodes converge beforehand.
+#'
+#' @return A list of sparse matrices representing the diffusion operators at different times.
+#' Each element in the list corresponds to P^t for t = 0, 2, 4, 8, ..., max_time.
+#' The list is named by the corresponding diffusion time.
+#'
+#' @keywords internal
+#' @export
+ConstructDiffusionOperators <- function(W, max_time){
+  cat("Create a list of diffusion operator\n")
+  pb <- txtProgressBar(min = 0, max = 100, style = 3)
+  P = Doubly_stochastic(W)
+  setTxtProgressBar(pb, 10)
+  # P = RowwiseNormalize(W)
+  # eig_res = RSpectra::eigs_sym(P, k = 1, which = "LM")
+  max_step = max_time
+  # P_ls = list(P)
+  P_ls = NULL
+  if(max_step < 1){
+    stop("Incorrect diffusion time, no propogation")
+  }else{
+    t = 1
+    # automatic decide max_step by checking whether the diag of P -> 1/n
+    while(t <= floor(log(max_step,2)) & 
+          max(abs((ncol(P) * diag(P)) * ncol(P) - ncol(P))) >= 1e-2 * ncol(P)){
+      P = P %*% P; t = t + 1
+      P_ls = c(P_ls,list(P))
+      setTxtProgressBar(pb, 10 * (t + 1))
+    }
+    setTxtProgressBar(pb, 100)
+  }
+  # Add t = 0
+  P_ls = c(list(diag(nrow(W))),P_ls)
+  # make it sparse
+  P_ls = lapply(P_ls,function(x) as(x,"sparseMatrix"))
+  names(P_ls) = c(0,2^seq(1,t-1))
+  cat("\nmax diffusion time:",2^(t-1))
+  return(P_ls)
+}

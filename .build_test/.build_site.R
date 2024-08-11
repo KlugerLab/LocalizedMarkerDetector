@@ -1,0 +1,36 @@
+library(devtools)
+library(pkgdown)
+
+setwd("/banach1/ruiqi/LocalizedMarkerDetector_package")
+
+# Create Template
+use_readme_rmd()
+# use_news_md()
+use_vignette("Example")
+
+# Build Package
+devtools::build_readme()
+Rcpp::compileAttributes()
+devtools::document()
+# load all function w/o install
+devtools::load_all(".") 
+
+
+# Render
+rmarkdown::render("vignettes/LMD_demo.Rmd")
+pkgdown::clean_site()
+
+# if (!dir.exists("docs/articles")) {
+#   dir.create("docs/articles", recursive = TRUE)
+# }
+# file.copy("vignettes/LMD_demo.html", "docs/articles/LMD_demo.html", overwrite = TRUE)
+
+pkgdown::build_site()
+
+
+# Install Package from local
+devtools::install() # install package
+
+# Install Package from github
+devtools::install_github("ruiqi0130/LocalizedMarkerDetector")
+

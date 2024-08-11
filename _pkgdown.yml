@@ -1,43 +1,69 @@
+template:
+  bootstrap: 3
+
+url: https://github.com/ruiqi0130/LocalizedMarkerDetector
+
 reference:
-  - title: "Cell Graphs"
-    desc: >
-      Construct cell graphs
+  - title: "Construct Cell Graphs"
+    # desc: >
+    #   Construct cell graphs
     contents:
-      - '`Symmetric_KNN_graph`'
-      - '`plot_knn_graph`'
-  - title: "Diffusion Score"
-    desc: >
-      Calculate and visualize diffusion scores.
+      - '`ConstructKnnGraph`'
+      - '`ConstructDiffusionOperators`'
+  - title: "Calculate LMD Score"
+    # desc: >
+    #   Calculate and visualize diffusion scores.
     contents:
-      - '`FeaturePlot_diffusion`'
-  - title: "Gene Modules"
-    desc: >
-      Identify gene modules
+      - '`LMD`'
+      - '`fast_get_lmds`'
+      - '`show_result_lmd`'
+  - title: "Obtain Gene Modules"
+    # desc: >
+    #   Identify gene modules
     contents:
-      - '`Calculate_distance`'
-  - title: "Cell Modules"
-    desc: >
-      Define cell module score based on the identifies gene modules.
+      - '`CalculateGeneDistance`'
+      - '`ClusterGenes`'
+  - title: "Calculate Cell Module Scores"
+    # desc: >
+    #   Define cell module score based on the identifies gene modules.
     contents:
       - '`AddModuleActivityScore`'
+  - title: "Visualization"
+    contents:
+      - '`VisualizeGraph`'
+      - '`CustomFeaturePlot`'
+      - '`VisualizeDiffusion`'
+      - '`CustomModulePlot`'
+      - '`VisualizeScorePattern`'
+      - '`VisualizeGeneHeatmap`'
+      - '`VisualizeGeneTSNE`'
+  - title: "Other"
+    contents:
+      - '`RowwiseNormalize`'
 
 navbar:
   structure:
     left:
     - home
-    - intro
+    # - intro
     - reference
     - articles
-    - tutorials
-    - news
+    # - tutorials
     right: github
   components:
-    home:
-      icon: fa-home fa-lg
-      href: index.html
     reference:
       text: Reference
       href: reference/index.html
-    intro:
-      text: Get started
-      href: articles/Example.html
+    # intro:
+    #   text: Get started
+    #   href: vignettes/index.html
+    articles:
+      text: Articles
+      menu:
+      - text: Example on mouse bone marrow scRNA-seq
+        href: articles/LMD_demo.html
+      - text: Application to cross-sample comparison
+        href: articles/LMD_cross_comparison_demo.html
+  right:
+  - icon: fa-github
+    href: https://github.com/ruiqi0130/LocalizedMarkerDetector
