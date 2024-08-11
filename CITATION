@@ -1,0 +1,24 @@
+citHeader("To cite the LocalizedMarkerDetector package in publications, please use the following citation:")
+
+bibfile <- "my_paper.bib"
+
+readLines(bibfile)
+
+citFooter("Please also cite the package as follows:")
+
+citEntry(
+  entry = "Manual",
+  title = "LocalizedMarkerDetector",
+  author = personList(
+    person(given = "Ruiqi", family = "Li", role = "aut"),
+    person(given = "Rihao", family = "Qu", role = "aut"),
+    person(given = "Francesco", family = "Strino", role = "aut")
+  ),
+  year = "2024",
+  note = "R package version 1.0.0",
+  textVersion = paste(
+    "Li R, Qu R, Strino F (2024).",
+    "LocalizedMarkerDetector.",
+    "R package version 1.0.0."
+  )
+)

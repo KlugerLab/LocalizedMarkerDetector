@@ -1,6 +1,6 @@
 ---
 title: "LMD Tutorial"
-author: "Ruiqi Li, Rihao Qu, Francesco Strino"
+author: "Ruiqi Li, Francesco Strino, Rihao Qu"
 date: "08/20/2024"
 output: rmarkdown::html_vignette
 bibliography: references.bib
@@ -27,7 +27,7 @@ Localized Marker Detector (LMD) is a computational framework designed for the id
   * [Identifying gene modules and characterizing functional cell groups](#identifying-gene-modules)
   * [Cross-sample comparison](LMD_cross_comparison_demo.html)
 
-```{r pressure, echo=FALSE, out.width="50%", out.height="auto"}
+```{r pressure, echo=FALSE, out.width="100%", out.height="auto"}
 knitr::include_graphics("../man/figures/LMD_workflow.png")
 ```
 
@@ -96,8 +96,8 @@ W = knn_result$graph # Symmetrized Graph ((A + AT) / 2)
 VisualizeGraph(affinity_m = W, label = cell_label, layout = visual_space) + 
   guides(color = guide_legend(ncol = 1, byrow = TRUE)) + 
   theme(
-    legend.title = element_text(size = rel(0.5)),
-    legend.text = element_text(size = rel(0.5)),
+    legend.title = element_text(size = rel(0.7)),
+    legend.text = element_text(size = rel(0.7)),
     legend.key.height = unit(1, "null"))
 ```
 
@@ -110,16 +110,16 @@ P_ls = ConstructDiffusionOperators(W = W, max_time = 2^20)
 # Generate initial state for each gene
 rho = RowwiseNormalize(dat[,colnames(W)])
 ```
-```{r gene_diffusion, warning = FALSE, message=FALSE, results='hide', fig.width=7, fig.height=2}
+```{r gene_diffusion, warning = FALSE, message=FALSE, results='hide', fig.width=10, fig.height=3}
 # Check the diffsued state of Fcnb
 gene = "Fcnb"
 suppressWarnings({
   VisualizeDiffusion(coord = visual_space,init_state = rho[gene,],P_ls = P_ls,check_time = c(2,2^4,2^10),gene_name = gene) & 
   theme(
-    plot.title = element_text(size = rel(0.5)),
-    plot.subtitle = element_text(size = rel(0.5)),
-    legend.title = element_text(size = rel(0.5)),
-    legend.text = element_text(size = rel(0.5)) )
+    plot.title = element_text(size = rel(0.7)),
+    plot.subtitle = element_text(size = rel(0.7)),
+    legend.title = element_text(size = rel(0.7)),
+    legend.text = element_text(size = rel(0.7)) )
 })
 ```
 
@@ -141,7 +141,7 @@ Now, we visualize three sets of genes with different entropy levels:
 
 * Large entropy: *Cd79a*, *Dock11*
 
-```{r, warning = FALSE, message = FALSE, fig.width=7, fig.height=4}
+```{r, fig.width=7, fig.height=4, warning = FALSE, message = FALSE}
 genes = c("Tlr11","Fcnb","Cd79a","4933425H06Rik","Uchl4","Dock11")
 FeaturePlot(tiss, features = genes, ncol = 3, order = TRUE) & NoAxes() & theme(plot.title = element_text(size = rel(0.5)), legend.text = element_text(size = rel(0.5)))
 ```
@@ -149,13 +149,13 @@ FeaturePlot(tiss, features = genes, ncol = 3, order = TRUE) & NoAxes() & theme(p
 We visualize the score profiles for genes above. Genes with more localized patterns (*Tlr11*, *Fcnb*, *Cd79a*) tend to have smaller LMD scores (area under the curve).
 ```{r score_profile, fig.height=4, fig.width=6, message=FALSE, warning=FALSE}
 genes_label = rep(c("localized","non_localized"),each = 3)
-VisualizeScorePattern(score_result$'score_profile', genes = genes, label_class = genes_label, facet_class = NULL, text = TRUE, normalize = TRUE) + theme(
-    plot.title = element_text(size = rel(0.5)),
-    plot.subtitle = element_text(size = rel(0.5)),
-    axis.title = element_text(size = rel(0.5)),
-    axis.text = element_text(size = rel(0.5)),
-    legend.title = element_text(size = rel(0.5)),
-    legend.text = element_text(size = rel(0.5)) )
+VisualizeScorePattern(score_result$'score_profile', genes = genes, label_class = genes_label, facet_class = NULL, text = TRUE, normalize = TRUE) & theme(
+    plot.title = element_text(size = rel(0.7)),
+    plot.subtitle = element_text(size = rel(0.7)),
+    axis.title.x = element_text(size = rel(0.7)), axis.title.y = element_text(size = rel(0.7)),
+    axis.text.x = element_text(size = rel(0.7)), axis.text.y = element_text(size = rel(0.7)),
+    legend.title = element_text(size = rel(0.7)),
+    legend.text = element_text(size = rel(0.7)) )
 ```
 
 The results of the LMD can be presented in a table, displaying the LMD score and the rank for each gene.
@@ -241,10 +241,10 @@ Next, we calculate the module activity score for each module using `AddModuleAct
 gene_partition = gene_partition$gene_partition
 tiss = AddModuleActivityScore(tiss, gene_partition = gene_partition)
 ```
-```{r gene_module, fig.height=15, fig.width=7, message=FALSE, warning=FALSE}
+```{r gene_module, fig.height=12, fig.width=10, message=FALSE, warning=FALSE}
 library(patchwork)
 # Visualize patterns
-(FeaturePlot(tiss, features = colnames(tiss@meta.data)[grepl("Module",colnames(tiss@meta.data))], order = TRUE, reduction = "tsne", ncol = 4) & NoAxes() & 
+(FeaturePlot(tiss, features = colnames(tiss@meta.data)[grepl("Module",colnames(tiss@meta.data))], order = TRUE, reduction = "tsne", ncol = 5) & NoAxes() & 
   scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1)) & labs(color = "ModuleScore") & theme(
     plot.title = element_text(size = rel(0.5)),
     legend.title = element_text(size = rel(0.5)),

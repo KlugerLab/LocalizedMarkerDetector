@@ -27,7 +27,7 @@ Localized Marker Detector (LMD) is a computational framework designed for the id
   * Identifying gene modules and characterizing functional cell groups
   * Cross-sample comparison
 
-```{r pressure, echo=FALSE, out.width="50%", out.height="auto"}
+```{r pressure, echo=FALSE, out.width="100%", out.height="auto"}
 knitr::include_graphics("./man/figures/LMD_workflow.png")
 ```
 

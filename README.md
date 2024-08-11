@@ -20,7 +20,7 @@ workflow of LMD comprises the following three main steps:
         groups
     -   Cross-sample comparison
 
-<img src="./man/figures/LMD_workflow.png" width="50%" height="auto" />
+<img src="./man/figures/LMD_workflow.png" width="100%" height="auto" />
 
 ## Installation
 
@@ -29,6 +29,8 @@ LMD can be installed in R as follows:
 ``` r
 install.packages("devtools")
 devtools::install_github("ruiqi0130/LocalizedMarkerDetector")
+
+library("LocalizedMarkerDetector")
 ```
 
 ## Example tutorial
@@ -41,4 +43,4 @@ tutorial](https://ruiqi0130.github.io/LocalizedMarkerDetector/articles/).
 References of LMD functions can be found
 [here](https://ruiqi0130.github.io/LocalizedMarkerDetector/reference/index.html).
 
-<!-- Data used in the tutorial can be downloaded from [Figshare](https://figshare.com/articles/dataset/Processed_Seurat_objects_for_GeneTrajectory_inference_Gene_Trajectory_Inference_for_Single-cell_Data_by_Optimal_Transport_Metrics_/25243225). -->
+<!-- Data used in this tutorial can be downloaded from [Tabula Muris](https://figshare.com/ndownloader/files/13092380). -->

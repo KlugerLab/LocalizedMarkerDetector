@@ -1,6 +1,6 @@
 ---
 title: "Application: Cross-sample Comparison"
-author: "Ruiqi Li, Rihao Qu, Francesco Strino"
+author: "Ruiqi Li"
 date: "08/20/2024"
 output: rmarkdown::html_vignette
 bibliography: references.bib
@@ -18,8 +18,7 @@ knitr::opts_chunk$set(
 ```
 
 # Loading Data
-One of the downstream tasks for LMD is cross-sample comparison to identify sample-enriched or shared cell populations without the need for integration and differential abundance testing. Here we use a 10x mouse embryonic skin
-dataset. The processing step can be found [here](https://github.com/ruiqi0130/LocalizedMarkerDetector/blob/main/LMD-paper/analysis/mouse_smoM2_example_process_from_10x.R).
+One of the downstream tasks for LMD is cross-sample comparison to identify sample-enriched or shared cell populations without the need for integration and differential abundance testing. Here we use a 10x mouse embryonic skin dataset. The processing step can be found [here](https://github.com/ruiqi0130/LocalizedMarkerDetector/blob/main/LMD-paper/analysis/mouse_smoM2_example_process_from_10x.R). The 10x data and processed Seurat data are available from the corresponding authors upon reasonable request.
 
 ```{r, warning = FALSE, message=FALSE}
 ##### Load required R libraries
@@ -94,11 +93,11 @@ Then we can visualize the expression patterns of gene modules across both sample
 
 Here we show two modules that are localized in both mutant and wildtype. 
 
-```{r shared_module, fig.height=6, fig.width=6, warning = FALSE, message=FALSE}
+```{r shared_module, fig.height=6, fig.width=7, warning = FALSE, message=FALSE}
 library(ggplotify)
 pl = lapply(c("Module1","Module16"), function(module_name){
   pl = lapply(c("MUT","CTL"), function(i){
-    FeaturePlot(get(paste0("data_S_",i)), features = c(module_name), order = TRUE) + ggtitle(i) & labs(color = "ModuleScore") & NoAxes()
+    FeaturePlot(get(paste0("data_S_",i)), features = c(module_name), order = TRUE) + scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1)) + ggtitle(i) & labs(color = "ModuleScore") & NoAxes()
   })
   p = as.ggplot(wrap_plots(pl, nrow = 1) + plot_layout(guides = "collect") + plot_annotation(title = module_name))
 })
@@ -110,10 +109,11 @@ p
 
 Here we show two modules that are only localized in mutant and dispersed in wildtype.
 
-```{r specific_module, fig.height=6, fig.width=6, warning = FALSE, message=FALSE}
+```{r specific_module, fig.height=6, fig.width=7, warning = FALSE, message=FALSE}
+library(ggplotify)
 pl = lapply(c("Module14","Module17"), function(module_name){
   pl = lapply(c("MUT","CTL"), function(i){
-    FeaturePlot(get(paste0("data_S_",i)), features = c(module_name), order = TRUE) + ggtitle(i) & labs(color = "ModuleScore") & NoAxes()
+    FeaturePlot(get(paste0("data_S_",i)), features = c(module_name), order = TRUE) + scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1)) + ggtitle(i) & labs(color = "ModuleScore") & NoAxes()
   })
   p = as.ggplot(wrap_plots(pl, nrow = 1) + plot_layout(guides = "collect") + plot_annotation(title = module_name))
 })

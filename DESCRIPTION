@@ -6,19 +6,19 @@ Authors@R:
            family = "Li",
            role = c("aut", "cre"),
            email = "ruiqi.li@yale.edu",
-           comment = c(ORCID = "YOUR-ORCID-ID")),
+           comment = c(ORCID = "0000-0002-9053-1678")),
     person(given = "Rihao",
            family = "Qu",
            role = c("aut", "ctb"),
            email = "rihao.qu@yale.edu",
-           comment = c(ORCID = "YOUR-ORCID-ID")),
+           comment = c(ORCID = "0000-0002-8258-8287")),
     person(given = "Francesco",
            family = "Strino",
            role = c("aut", "ctb"),
            email = "francesco.strino@pcmgf.com",
-           comment = c(ORCID = "YOUR-ORCID-ID")))
-Description: Local marker detector.
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a license
+           comment = c(ORCID = "0000-0002-9310-4794")))
+Description: Localized Marker Detector (LMD) is a computational framework designed for the identification of gene expression markers localized to specific cell populations within single-cell RNA sequencing data. 
+License: MIT + file LICENSE
 Encoding: UTF-8
 URL: https://ruiqi0130.github.io/LocalizedMarkerDetector/, https://github.com/ruiqi0130/LocalizedMarkerDetector
 LazyData: true

@@ -5,6 +5,7 @@ setwd("/banach1/ruiqi/LocalizedMarkerDetector_package")
 
 # Create Template
 use_readme_rmd()
+usethis::use_mit_license("Ruiqi Li")
 # use_news_md()
 use_vignette("Example")
 
@@ -17,7 +18,7 @@ devtools::load_all(".")
 
 
 # Render
-rmarkdown::render("vignettes/LMD_demo.Rmd")
+# rmarkdown::render("vignettes/LMD_demo.Rmd")
 pkgdown::clean_site()
 
 # if (!dir.exists("docs/articles")) {
