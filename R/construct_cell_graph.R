@@ -39,12 +39,11 @@ findShortestEdge <- function(component1, component2, data) {
 #' }
 #'
 #' @examples
-#' \dontrun{
 #' feature_space <- matrix(rnorm(200), nrow = 10, ncol = 20)
 #' result <- ConstructKnnGraph(knn = 3, feature_space = feature_space)
 #' graph <- result$graph
 #' adj_matrix <- result$adj_matrix
-#' }
+#' 
 #' @export
 ConstructKnnGraph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, self_loop = 1){
   cat("Constructing KNN graph\n")
@@ -138,13 +137,7 @@ ConstructKnnGraph <- function(knn = 5, feature_space, adjust_by_MST = TRUE, self
 #'   \item{adj_matrix}{A binary adjacency matrix indicating the presence of edges between nodes.}
 #' }
 #'
-#' @examples
-#' \dontrun{
-#' feature_space <- matrix(rnorm(100), nrow = 10)
-#' result <- ConstructGaussianGraph(knn = 3, feature_space = feature_space)
-#' graph <- result$graph
-#' adj_matrix <- result$adj_matrix
-#' }
+#' 
 #' 
 #' @keywords internal
 #' 

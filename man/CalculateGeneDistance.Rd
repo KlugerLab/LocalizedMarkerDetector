@@ -25,11 +25,9 @@ A distance object representing the pairwise distances between genes.
 Calculates the pairwise distance between genes in an expression matrix using various metrics.
 }
 \examples{
-\dontrun{
-  expression_matrix <- matrix(runif(100), nrow=10)
-  rownames(expression_matrix) <- paste0("Gene", 1:10)
-  colnames(expression_matrix) <- paste0("Sample", 1:10)
-  dist <- CalculateGeneDistance(expression_matrix, method="pearson")
-}
+expression_matrix <- matrix(runif(100), nrow=10)
+rownames(expression_matrix) <- paste0("Gene", 1:10)
+colnames(expression_matrix) <- paste0("Sample", 1:10)
+dist <- CalculateGeneDistance(expression_matrix, method="pearson")
 
 }

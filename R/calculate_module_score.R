@@ -96,11 +96,8 @@ GMM_subsampling <- function(seed, gene_partition, expr_dat, cell_kNN_graph, majo
 #'
 #' @details This function computes module activity scores for gene partitions in a Seurat object. It allows for optional local smoothing of the scores based on neighborhood information.
 #'
-#' @examples
-#' \dontrun{
-#'   srat <- AddModuleActivityScore(srat, gene_partition, assay = "RNA", do_local_smooth = TRUE, knn = 10, major_vote = 6, nloop = 100, module_names = NULL)
-#' }
-#'
+#' 
+#' 
 #' @importFrom Seurat AddMetaData
 #' @export
 AddModuleActivityScore <- function(srat, gene_partition, assay = "RNA", 

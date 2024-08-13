@@ -27,10 +27,9 @@ A list containing the following elements:
 Constructs a symmetric KNN graph from a given feature space.
 }
 \examples{
-\dontrun{
 feature_space <- matrix(rnorm(200), nrow = 10, ncol = 20)
 result <- ConstructKnnGraph(knn = 3, feature_space = feature_space)
 graph <- result$graph
 adj_matrix <- result$adj_matrix
-}
+
 }

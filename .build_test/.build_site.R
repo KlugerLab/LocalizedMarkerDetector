@@ -1,7 +1,7 @@
 library(devtools)
 library(pkgdown)
 
-setwd("/banach1/ruiqi/LocalizedMarkerDetector_package")
+setwd("/banach1/ruiqi/local_marker/LocalizedMarkerDetector")
 
 # Create Template
 use_readme_rmd()
@@ -24,7 +24,9 @@ pkgdown::clean_site()
 # if (!dir.exists("docs/articles")) {
 #   dir.create("docs/articles", recursive = TRUE)
 # }
-# file.copy("vignettes/LMD_demo.html", "docs/articles/LMD_demo.html", overwrite = TRUE)
+library(fs)
+dir_copy("articles", "docs/articles", overwrite = TRUE)
+# file.copy("articles/LMD_cross_comparison_demo.html", "docs/articles/LMD_cross_comparison_demo.html", overwrite = TRUE)
 
 pkgdown::build_site()
 

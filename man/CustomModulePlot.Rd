@@ -30,7 +30,7 @@ A list of ggplot2 objects representing the feature plots for each module.
 Creates feature plots for visualizing the average expression of gene modules across cells.
 }
 \examples{
-\dontrun{
+
 # Example with Seurat object
 library(Seurat)
 seurat_obj <- CreateSeuratObject(matrix(runif(2000), nrow = 200))
@@ -45,6 +45,6 @@ coord <- matrix(runif(400), nrow = 200, ncol = 2)
 feature_partition <- factor(sample(letters[1:3], 200, replace = TRUE))
 plot_list <- CustomModulePlot(dat, coord = coord, feature_partition = feature_partition)
 lapply(plot_list, print)
-}
+
 
 }

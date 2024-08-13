@@ -36,13 +36,4 @@ A list containing the following elements:
 \description{
 Constructs a Gaussian kernel graph from a given feature space.
 }
-\examples{
-\dontrun{
-feature_space <- matrix(rnorm(100), nrow = 10)
-result <- ConstructGaussianGraph(knn = 3, feature_space = feature_space)
-graph <- result$graph
-adj_matrix <- result$adj_matrix
-}
-
-}
 \keyword{internal}

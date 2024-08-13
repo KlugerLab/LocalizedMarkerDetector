@@ -19,12 +19,10 @@
 #' @return A distance object representing the pairwise distances between genes.
 #'
 #' @examples
-#' \dontrun{
-#'   expression_matrix <- matrix(runif(100), nrow=10)
-#'   rownames(expression_matrix) <- paste0("Gene", 1:10)
-#'   colnames(expression_matrix) <- paste0("Sample", 1:10)
-#'   dist <- CalculateGeneDistance(expression_matrix, method="pearson")
-#' }
+#' expression_matrix <- matrix(runif(100), nrow=10)
+#' rownames(expression_matrix) <- paste0("Gene", 1:10)
+#' colnames(expression_matrix) <- paste0("Sample", 1:10)
+#' dist <- CalculateGeneDistance(expression_matrix, method="pearson")
 #'
 #' @importFrom stats dist
 #' @importFrom philentropy distance
@@ -70,10 +68,9 @@ CalculateGeneDistance <- function(dat, method){
 #' @details This function performs hierarchical clustering using the specified method and partitions the genes. It also provides options for other clustering methods like dbscan and hdbscan, and to filter out noisy genes.
 #'
 #' @examples
-#' \dontrun{
-#'   gene_dist <- dist(matrix(runif(100), nrow=10))
-#'   gene_partition <- ClusterGenes(gene_dist, clustering_method="average")
-#' }
+#' gene_dist <- dist(matrix(runif(100), nrow=10))
+#' gene_partition <- ClusterGenes(gene_dist, clustering_method="average")
+#' 
 #'
 #' @importFrom stats hclust
 #' @importFrom dynamicTreeCut cutreeDynamic

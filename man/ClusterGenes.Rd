@@ -39,10 +39,9 @@ This function partitions genes based on their pairwise distances using various c
 This function performs hierarchical clustering using the specified method and partitions the genes. It also provides options for other clustering methods like dbscan and hdbscan, and to filter out noisy genes.
 }
 \examples{
-\dontrun{
-  gene_dist <- dist(matrix(runif(100), nrow=10))
-  gene_partition <- ClusterGenes(gene_dist, clustering_method="average")
-}
+gene_dist <- dist(matrix(runif(100), nrow=10))
+gene_partition <- ClusterGenes(gene_dist, clustering_method="average")
+
 
 }
 \references{

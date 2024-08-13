@@ -36,7 +36,7 @@ A ggplot2 object representing the custom feature plot.
 Creates a custom feature plot for visualizing a feature's values on a reduced dimension embedding (e.g., UMAP or t-SNE).
 }
 \examples{
-\dontrun{
+
 # Example with Seurat object
 library(Seurat)
 seurat_obj <- CreateSeuratObject(matrix(runif(2000), nrow = 200))
@@ -50,6 +50,6 @@ coord <- matrix(rnorm(200), nrow = 100, ncol = 2)
 value <- rnorm(100)
 plot <- CustomFeaturePlot(coord, value, title_name = "Custom Plot")
 print(plot)
-}
+
 
 }

@@ -112,17 +112,6 @@
 
 </dl></div>
 
-    <div id="ref-examples">
-    <h2>Examples</h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="va">feature_space</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">100</span><span class="op">)</span>, nrow <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu">ConstructGaussianGraph</span><span class="op">(</span>knn <span class="op">=</span> <span class="fl">3</span>, feature_space <span class="op">=</span> <span class="va">feature_space</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">graph</span> <span class="op">&lt;-</span> <span class="va">result</span><span class="op">$</span><span class="va">graph</span></span></span>
-<span class="r-in"><span><span class="va">adj_matrix</span> <span class="op">&lt;-</span> <span class="va">result</span><span class="op">$</span><span class="va">adj_matrix</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
-<span class="r-in"><span></span></span>
-</code></pre></div>
-    </div>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
     <nav id="toc" data-toggle="toc" class="sticky-top"><h2 data-toc-skip>Contents</h2>
