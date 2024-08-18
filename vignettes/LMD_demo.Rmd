@@ -38,6 +38,8 @@ library("LocalizedMarkerDetector")
 library("Seurat")
 library("SeuratWrappers")
 library("tictoc")
+library("ggplot2")
+library("patchwork")
 ```
 
 # Preparing input data
@@ -45,9 +47,23 @@ library("tictoc")
 The preprocessed Seurat object for this tutorial can be downloaded from [figshare](https://figshare.com/ndownloader/files/13092380). The preprocessing step can be refer to the [Tabula Muris workflow](https://github.com/czbiohub-sf/tabula-muris/blob/master/00_data_ingest/All_FACS_Notebook.Rmd)[@tabula2018single].
 
 ```{r, warning = FALSE, message=FALSE}
-# Load the dir.path
+dir.path0 = "~/" # Specify the directory path where you want to save the data
+file_name = "marrow_facs.rds" # Specify the file name for saving the data
+```
+```{r, warning = FALSE, message=FALSE, include = FALSE}
 source("../LMD-paper/paths.R")
-tiss <- readRDS(file.path(dir.path0,"tabular_muris/marrow_facs.rds"))
+dir.path0 = file.path(dir.path0,"tabular_muris")
+```
+```{r, warning = FALSE, message=FALSE}
+if (!file.exists(file.path(dir.path0,file_name))) {
+    options(timeout=6000)
+    download.file("https://figshare.com/ndownloader/files/13092380", destfile = file.path(dir.path0,file_name), method = 'libcurl')
+    # Check and upgrade the Seurat object if needed
+    load(file.path(dir.path0,file_name))
+    tiss <- UpdateSeuratObject(tiss)
+    saveRDS(tiss, file = file.path(dir.path0,file_name))
+}
+tiss <- readRDS(file = file.path(dir.path0,file_name))
 ```
 
 ## Extracting input data
@@ -83,10 +99,10 @@ dat = dat[selected_genes,,drop = FALSE]
 This provides a step-by-step tutorial for a better understanding of LMD. To directly obtain the output of LMD, skip to [Running LMD in One Step](#running-lmd-in-one-step).
 
 ## Step1: Constructing a cell-cell affinity graph
+
 We construct the cell-cell kNN graph (`K`= 5 in this example) using `ConstructKnnGraph`.
 
 ```{r cell_graph, fig.height=5, fig.width=7, message=FALSE, warning=FALSE}
-library(ggplot2)
 # Construct knn graph
 knn_result = ConstructKnnGraph(knn = 5, feature_space = feature_space)
 A = knn_result$adj_matrix # Adjacency Matrix
@@ -101,8 +117,10 @@ VisualizeGraph(affinity_m = W, label = cell_label, layout = visual_space) +
     legend.key.height = unit(1, "null"))
 ```
 
+
 ## Step2: Diffusing the gene expression value across the cell graph
-Next, we set the initial state of each gene by normalizing the expression matrix using `RowwiseNormalize`. We then construct a list of diffusion operators at dyadic time scales using `ConstructDiffusionOperators`. By multiplying the initial state with the corresponding diffusion operators, we obtain the diffused state of each gene at different time scales. Finally, we can visualize the diffused state of each gene on the cell embedding. Here we visualize the diffused state of the marker gene *Fcnb* at three different time points: $t=2^1,t=2^4,$ and $t=2^{10}$. 
+
+Next, we set the initial state of each gene by normalizing the expression matrix using `RowwiseNormalize`. We then construct a list of diffusion operators at different time scales using `ConstructDiffusionOperators`. By multiplying the initial state with the corresponding diffusion operators, we obtain the diffused state of each gene at the dyadic time scales $0,2^1,2^2,\dots$. Finally, we can visualize the diffused state of each gene on the cell embedding. 
 
 ```{r, warning = FALSE, message = FALSE}
 # Construct a list of diffusion operators
@@ -110,22 +128,23 @@ P_ls = ConstructDiffusionOperators(W = W, max_time = 2^20)
 # Generate initial state for each gene
 rho = RowwiseNormalize(dat[,colnames(W)])
 ```
-```{r gene_diffusion, warning = FALSE, message=FALSE, results='hide', fig.width=10, fig.height=3}
-# Check the diffsued state of Fcnb
+
+Here we visualize the diffused state of *Fcnb* - a marker for granulocytopoietic cells, at four different time points: $t=0,t=2^1,t=2^4,$ and $t=2^{10}$. 
+
+```{r gene_diffusion, warning = FALSE, message=FALSE, results='hide', fig.width=10, fig.height=2}
 gene = "Fcnb"
-suppressWarnings({
-  VisualizeDiffusion(coord = visual_space,init_state = rho[gene,],P_ls = P_ls,check_time = c(2,2^4,2^10),gene_name = gene) & 
-  theme(
-    plot.title = element_text(size = rel(0.7)),
-    plot.subtitle = element_text(size = rel(0.7)),
-    legend.title = element_text(size = rel(0.7)),
-    legend.text = element_text(size = rel(0.7)) )
-})
+VisualizeDiffusion(coord = visual_space,init_state = rho[gene,],P_ls = P_ls,check_time = c(0,2,2^4,2^10),gene_name = gene) & 
+theme(
+  plot.title = element_text(size = rel(0.7)),
+  plot.subtitle = element_text(size = rel(0.7)),
+  legend.title = element_text(size = rel(0.7)),
+  legend.text = element_text(size = rel(0.7)) )
 ```
+
 
 ## Step3: Obtain Diffusion KL score & LMD score
 
-We measure the dynamics of the diffusion process for each gene using a score profile. This profile is calculated by the KL divergence between the initial state and the diffused state, and then normalizing it by the KL divergence between the initial state and the equilibrium state. 
+We measure the dynamics of the diffusion process for each gene using a score profile. This profile is calculated by the Kullback–Leibler (KL) divergence between the initial state and the diffused state, and then normalizing it by the KL divergence between the initial state and the equilibrium state. 
 
 We summarize this score profile into the LMD score, which is the cumulative sum of the score profile at all dyadic time steps. This LMD score can be used to rank the genes. Both the score profile and the LMD score are calculated using `fast_get_lmds`.
 
@@ -133,20 +152,21 @@ We summarize this score profile into the LMD score, which is the cumulative sum 
 score_result = fast_get_lmds(W = W, init_state = rho, P_ls = P_ls, largeData = FALSE)
 ```
 
-Now, we visualize three sets of genes with different entropy levels:
+Now, we visualize three sets of genes expressing in different number of cells:
 
-* Small entropy: *Tlr11*, *4933425H06Rik*
+* Expressed in approximately $20$ cells: *Tlr11*, *4933425H06Rik*
 
-* Medium entropy: *Fcnb*, *Uchl4*
+* Expressed in approximately $500$ cells: *Fcnb*, *Uchl4*
 
-* Large entropy: *Cd79a*, *Dock11*
+* Expressed in approximately $2,500$ cells: *Cd79a*, *Dock11*
 
 ```{r, fig.width=7, fig.height=4, warning = FALSE, message = FALSE}
 genes = c("Tlr11","Fcnb","Cd79a","4933425H06Rik","Uchl4","Dock11")
 FeaturePlot(tiss, features = genes, ncol = 3, order = TRUE) & NoAxes() & theme(plot.title = element_text(size = rel(0.5)), legend.text = element_text(size = rel(0.5)))
 ```
 
-We visualize the score profiles for genes above. Genes with more localized patterns (*Tlr11*, *Fcnb*, *Cd79a*) tend to have smaller LMD scores (area under the curve).
+We visualize the score profiles for genes above. Genes with more localized patterns (*Tlr11*, *Fcnb*, *Cd79a*) tend to have smaller LMD scores (area under the curve) regardless of the number of cells in which they are expressed.
+
 ```{r score_profile, fig.height=4, fig.width=6, message=FALSE, warning=FALSE}
 genes_label = rep(c("localized","non_localized"),each = 3)
 VisualizeScorePattern(score_result$'score_profile', genes = genes, label_class = genes_label, facet_class = NULL, text = TRUE, normalize = TRUE) & theme(
@@ -176,6 +196,10 @@ LMD can be run in one step. In this case, the input is:
 
 This example dataset contains 5,037 cells, running `LMD` should take 1 to 3 minutes to finish.
 
+**Note**: The actual runtime can vary depending on your system's matrix operation performance. To potentially reduce runtime and enhance performance, ensure that your R environment is configured with optimized BLAS/LAPACK libraries, such as OpenBLAS, which support parallel processing. For details on the specific setup used in this tutorial, please refer to [Session information](#session-information).
+
+For more information on installing and configuring these libraries, visit [OpenBLAS](https://www.openblas.net/) and [R Administration and Installation](https://cran.r-project.org/doc/manuals/r-release/R-admin.html#OpenBLAS-and-BLIS).
+
 ```{r, warning = FALSE}
 # Load packages
 library(LocalizedMarkerDetector)
@@ -204,7 +228,11 @@ top_lmd_genes = names(res$cut_off_gene)
 
 Next, we compute the gene-gene pairwise Jaccard distance based on their expression levels over all cells using `CalculateGeneDistance`. We recommend users to apply [ALRA](https://github.com/KlugerLab/ALRA/tree/master) imputation[@linderman2022zero] first to reduce the effect of drop-out events on the gene distance calculations.
 
-**Note**: This step is time-consuming and may take 4 to 5 minutes to complete.
+**Notes**:
+
+1. ALRA may produce different results with each run, leading to slight variations in the gene-gene distance and gene clustering results For reproducibility with this tutorial, users can download our [preprocessed Seurat object](https://figshare.com/ndownloader/files/48627340), which includes the ALRA assay.
+
+2. This step is time-consuming and may take 4 to 5 minutes to complete.
 
 ```{r, warning = FALSE, message = FALSE}
 # tic()
@@ -223,32 +251,68 @@ dist = CalculateGeneDistance(dat_alra, method = "jaccard")
 After obtaining the gene-gene distance matrix `dist`, we cluster the genes using `stats::hclust` with `average` option and determine the gene modules using `dynamicTreeCut::cutreeDynamic`. Optionally, we remove outlier genes in each module with SML algorithm[@parisi2014ranking] and discard modules containing fewer than 10 genes. All of these steps are performed using `ClusterGenes`.
 
 ```{r, warning = FALSE}
-gene_partition = ClusterGenes(dist, clustering_method = "average", return_tree = TRUE, deepSplit = 1)
+gene_cl_res = ClusterGenes(dist, clustering_method = "average", return_tree = TRUE, deepSplit = 1)
 ```
 
 We can visualize the pairwise distance matrix of genes. The sidebar and side tree represent the partitioning of genes into gene modules.
 
 ```{r, warning = FALSE, message = FALSE, fig.width=5, fig.height=5}
-VisualizeGeneHeatmap(dist, gene_partition = gene_partition$gene_partition, gene_hree = gene_partition$gene_hree)
+VisualizeGeneHeatmap(dist, gene_partition = gene_cl_res$gene_partition, gene_hree = gene_cl_res$gene_hree)
 ```
 
 # Computing Per-Cell Module Activity Scores
+
 Next, we calculate the module activity score for each module using `AddModuleActivityScore`, which represents the probability of a module being expressed in a given cell. This score can be further used to visualize the expression patterns of each module and to identify the corresponding cells.
 
 **Note**: This step is CPU-intensive and may take 4 to 5 minutes to complete. We also suggest considering alternative methods, such as [`Seurat::AddModuleScore`](https://satijalab.org/seurat/reference/addmodulescore), to visualize the gene module on cell embedding.
 
+```{r, warning = FALSE, message=FALSE}
+gene_partition = gene_cl_res$gene_partition
+levels(gene_partition) = 1:nlevels(gene_partition) # rename gene modules
+```
 ```{r, warning = FALSE, eval=FALSE}
-gene_partition = gene_partition$gene_partition
 tiss = AddModuleActivityScore(tiss, gene_partition = gene_partition)
 ```
 ```{r gene_module, fig.height=12, fig.width=10, message=FALSE, warning=FALSE}
-library(patchwork)
 # Visualize patterns
 (FeaturePlot(tiss, features = colnames(tiss@meta.data)[grepl("Module",colnames(tiss@meta.data))], order = TRUE, reduction = "tsne", ncol = 5) & NoAxes() & 
   scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1)) & labs(color = "ModuleScore") & theme(
     plot.title = element_text(size = rel(0.5)),
     legend.title = element_text(size = rel(0.5)),
     legend.text = element_text(size = rel(0.5)) )) + plot_layout(guides = "collect")
+```
+
+
+We can take a closer look at a module by examining several of its top localized genes.
+
+```{r gene_module_genes, fig.height=4, fig.width=10, message=FALSE, warning=FALSE}
+module_id = 19
+p1 = FeaturePlot(tiss, features = paste0("Module",module_id), order = TRUE, reduction = "tsne") + ggtitle(sprintf("Module%s (%d genes)",module_id,sum(gene_partition == module_id))) + labs(color = "ModuleScore") + NoAxes()
+pl = FeaturePlot(tiss, features = names(gene_partition)[gene_partition == module_id][1:6],ncol = 3, order = TRUE) & NoAxes()
+p = (p1 + pl + plot_layout(design = c("#BBB\nABBB\nABBB\n#BBB"))) & theme(
+    plot.title = element_text(size = rel(0.5)),
+    legend.title = element_text(size = rel(0.5)),
+    legend.text = element_text(size = rel(0.5)) )
+p
+```
+
+To better understand the biological functions of these gene modules, we can perform a series of functional enrichment analyses, such as Gene Ontology (GO) enrichment analysis[@wu2021clusterprofiler] or Reactome Pathway Database enrichment analysis[@yu2016reactomepa]. Here, we demonstrate the Reactome Pathway Database enrichment analysis using `ReactomePA::enrichPathway` for previous selected gene module, and we print its top 5 significantly enriched pathways.
+
+```{r, warning = FALSE, message=FALSE}
+library(ReactomePA)
+library(org.Mm.eg.db)
+
+bg_genes = rownames(dat) # Set all genes(after filtering) in the expression matrix as background genes
+universe_df = data.frame("symbol" = bg_genes,"entrez" = mapIds(org.Mm.eg.db, keys=bg_genes, column="ENTREZID", keytype="SYMBOL"))
+universe_df = universe_df[!is.na(universe_df$entrez),]
+epathway_result <- enrichPathway(gene=universe_df[universe_df$symbol %in% names(gene_partition)[gene_partition == module_id],"entrez"],
+                organism = "mouse",
+                pAdjustMethod = "BH",
+                pvalueCutoff = 0.05,
+                universe = universe_df$entrez)
+```
+```{r, warning = FALSE}
+print(epathway_result@result[1:5,c('Description', 'GeneRatio', 'p.adjust')])
 ```
 
 # Session information

@@ -123,7 +123,7 @@ fast_calculate_score_profile <- function(W, max_time = 2^15,
 #' @export
 fast_calculate_score_profile_largeData <- function(W, max_time = 2^15, init_state,
                                                    score_ls = c("score0")){
-  cat("Calculate LMD score profile for large data\n")
+  cat("Calculate LMD score profile for large data...\n")
   if((ncol(W) != ncol(init_state)) & (ncol(W) == nrow(init_state))){
     init_state = t(init_state)
   }
@@ -133,7 +133,7 @@ fast_calculate_score_profile_largeData <- function(W, max_time = 2^15, init_stat
   final_state = rep(1/nrow(W),nrow(W)) # bi-stochastic
   
   # Calculate transition matrix
-  cat("Doubly Stochastic\n")
+  cat("Run doubly stochastic on affinity matrix...\n")
   P = Doubly_stochastic(W)
   # cat("Adjust self-loop weight")
   # diag(P) = 2/(min(rowSums(W)) - max(diag(W)))
@@ -228,7 +228,7 @@ fast_calculate_score_profile_highres <- function(W, max_time = 100, init_state,
   final_state = rep(1/nrow(W),nrow(W)) # bi-stochastic
   
   # Calculate transition matrix
-  cat("Doubly Stochastic\n")
+  cat("Run doubly stochastic on affinity matrix...\n")
   P = Doubly_stochastic(W)
   P = as.matrix(P)
   score_df = get_score_profile(state_0 = init_state,
@@ -380,7 +380,7 @@ LMD <- function(expression, feature_space, knn = 5,
   rho = rho[,colnames(W),drop = FALSE]
   rho = rho[which(apply(rho,1,function(x) sum(x>0) >= min_cell))
             ,,drop = FALSE] # sanity check & remove genes which express at less than 5 cells
-  cat(sprintf("Remove %d genes which express at less than %d cells\n",
+  cat(sprintf("Remove %d genes which express in less than %d cells\n",
               nrow(expression) - nrow(rho),min_cell))
   res = fast_get_lmds(W = W, max_time = max_time,
                       init_state = rho, 
@@ -450,7 +450,7 @@ Calculate_outgoing_weight <- function(W, max_time = 2^15, init_state){
   final_state = rep(1/nrow(W),nrow(W)) # bi-stochastic
   
   # Calculate transition matrix
-  cat("Doubly Stochastic\n")
+  cat("Run doubly stochastic on affinity matrix...\n")
   P = Doubly_stochastic(W)
   cat("self-weight:",diag(P)[1],"\n")
   

@@ -122,7 +122,9 @@ comparison</a></li>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st"><a href="https://ruiqi0130.github.io/LocalizedMarkerDetector/" class="external-link">"LocalizedMarkerDetector"</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st"><a href="https://satijalab.org/seurat" class="external-link">"Seurat"</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st">"SeuratWrappers"</span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st"><a href="https://github.com/jabiru/tictoc" class="external-link">"tictoc"</a></span><span class="op">)</span></span></code></pre></div>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st"><a href="https://github.com/jabiru/tictoc" class="external-link">"tictoc"</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st"><a href="https://ggplot2.tidyverse.org" class="external-link">"ggplot2"</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st"><a href="https://patchwork.data-imaginist.com" class="external-link">"patchwork"</a></span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="preparing-input-data">Preparing input data<a class="anchor" aria-label="anchor" href="#preparing-input-data"></a>
@@ -136,9 +138,18 @@ preprocessing step can be refer to the <a href="https://github.com/czbiohub-sf/t
 Muris workflow</a><span class="citation">(Consortium et al.
 2018)</span>.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Load the dir.path</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"../LMD-paper/paths.R"</span><span class="op">)</span></span>
-<span><span class="va">tiss</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="st">"tabular_muris/marrow_facs.rds"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">dir.path0</span> <span class="op">=</span> <span class="st">"~/"</span> <span class="co"># Specify the directory path where you want to save the data</span></span>
+<span><span class="va">file_name</span> <span class="op">=</span> <span class="st">"marrow_facs.rds"</span> <span class="co"># Specify the file name for saving the data</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="va">file_name</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>timeout<span class="op">=</span><span class="fl">6000</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/utils/download.file.html" class="external-link">download.file</a></span><span class="op">(</span><span class="st">"https://figshare.com/ndownloader/files/13092380"</span>, destfile <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="va">file_name</span><span class="op">)</span>, method <span class="op">=</span> <span class="st">'libcurl'</span><span class="op">)</span></span>
+<span>    <span class="co"># Check and upgrade the Seurat object if needed</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/load.html" class="external-link">load</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="va">file_name</span><span class="op">)</span><span class="op">)</span></span>
+<span>    <span class="va">tiss</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/SeuratObject/man/UpdateSeuratObject.html" class="external-link">UpdateSeuratObject</a></span><span class="op">(</span><span class="va">tiss</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">tiss</span>, file <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="va">file_name</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">tiss</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span>file <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="va">file_name</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="extracting-input-data">Extracting input data<a class="anchor" aria-label="anchor" href="#extracting-input-data"></a>
@@ -156,7 +167,7 @@ cells.</p></li>
 <li><p><code>cell_label</code>: Metadata related to the cells, such as
 cell type annotations, for visualization.</p></li>
 </ul>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/pkg/SeuratObject/man/DefaultAssay.html" class="external-link">DefaultAssay</a></span><span class="op">(</span><span class="va">tiss</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="st">"RNA"</span></span>
 <span><span class="va">n_dim</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">tiss</span><span class="op">@</span><span class="va">reductions</span><span class="op">$</span><span class="va">pca</span><span class="op">@</span><span class="va">cell.embeddings</span><span class="op">)</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span></span>
 <span><span class="va">feature_space</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">tiss</span><span class="op">@</span><span class="va">reductions</span><span class="op">$</span><span class="va">pca</span><span class="op">@</span><span class="va">cell.embeddings</span><span class="op">[</span>,<span class="fl">1</span><span class="op">:</span><span class="va">n_dim</span><span class="op">]</span><span class="op">)</span></span>
@@ -174,7 +185,7 @@ cells and less than
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>50</mn><mi>%</mi></mrow><annotation encoding="application/x-tex">50\%</annotation></semantics></math>
 of cells. A gene is considered “detected” in a cell if its expression
 level is greater than the median expression level of that cell.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">Gene_detected_count</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">dat</span> <span class="op">&gt;</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">dat</span>,<span class="fl">2</span>,<span class="va">median</span><span class="op">)</span>,<span class="fl">1</span>,<span class="va">sum</span><span class="op">)</span></span>
 <span><span class="va">selected_genes</span> <span class="op">=</span> <span class="op">(</span><span class="va">Gene_detected_count</span> <span class="op">&gt;=</span> <span class="fl">10</span><span class="op">)</span> <span class="op">&amp;</span> <span class="op">(</span><span class="va">Gene_detected_count</span> <span class="op">&lt;=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">dat</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span><span class="op">)</span></span>
 <span><span class="va">dat</span> <span class="op">=</span> <span class="va">dat</span><span class="op">[</span><span class="va">selected_genes</span>,,drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span></code></pre></div>
@@ -190,9 +201,8 @@ LMD. To directly obtain the output of LMD, skip to <a href="#running-lmd-in-one-
 </h3>
 <p>We construct the cell-cell kNN graph (<code>K</code>= 5 in this
 example) using <code>ConstructKnnGraph</code>.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
-<span><span class="co"># Construct knn graph</span></span>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Construct knn graph</span></span>
 <span><span class="va">knn_result</span> <span class="op">=</span> <span class="fu"><a href="../reference/ConstructKnnGraph.html">ConstructKnnGraph</a></span><span class="op">(</span>knn <span class="op">=</span> <span class="fl">5</span>, feature_space <span class="op">=</span> <span class="va">feature_space</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Constructing KNN graph</span></span>
 <span><span class="va">A</span> <span class="op">=</span> <span class="va">knn_result</span><span class="op">$</span><span class="va">adj_matrix</span> <span class="co"># Adjacency Matrix</span></span>
@@ -213,65 +223,74 @@ graph<a class="anchor" aria-label="anchor" href="#step2-diffusing-the-gene-expre
 </h3>
 <p>Next, we set the initial state of each gene by normalizing the
 expression matrix using <code>RowwiseNormalize</code>. We then construct
-a list of diffusion operators at dyadic time scales using
+a list of diffusion operators at different time scales using
 <code>ConstructDiffusionOperators</code>. By multiplying the initial
 state with the corresponding diffusion operators, we obtain the diffused
-state of each gene at different time scales. Finally, we can visualize
-the diffused state of each gene on the cell embedding. Here we visualize
-the diffused state of the marker gene <em>Fcnb</em> at three different
-time points:
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>t</mi><mo>=</mo><msup><mn>2</mn><mn>1</mn></msup><mo>,</mo><mi>t</mi><mo>=</mo><msup><mn>2</mn><mn>4</mn></msup><mo>,</mo></mrow><annotation encoding="application/x-tex">t=2^1,t=2^4,</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>t</mi><mo>=</mo><msup><mn>2</mn><mn>10</mn></msup></mrow><annotation encoding="application/x-tex">t=2^{10}</annotation></semantics></math>.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+state of each gene at the dyadic time scales
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0</mn><mo>,</mo><msup><mn>2</mn><mn>1</mn></msup><mo>,</mo><msup><mn>2</mn><mn>2</mn></msup><mo>,</mo><mi>…</mi></mrow><annotation encoding="application/x-tex">0,2^1,2^2,\dots</annotation></semantics></math>.
+Finally, we can visualize the diffused state of each gene on the cell
+embedding.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Construct a list of diffusion operators</span></span>
 <span><span class="va">P_ls</span> <span class="op">=</span> <span class="fu"><a href="../reference/ConstructDiffusionOperators.html">ConstructDiffusionOperators</a></span><span class="op">(</span>W <span class="op">=</span> <span class="va">W</span>, max_time <span class="op">=</span> <span class="fl">2</span><span class="op">^</span><span class="fl">20</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Create a list of diffusion operator</span></span>
+<span><span class="co">#&gt; Create a list of diffusion operators...</span></span>
 <span><span class="co">#&gt;   |                                                                              |                                                                      |   0%  |                                                                              |=======                                                               |  10%  |                                                                              |=====================                                                 |  30%  |                                                                              |============================                                          |  40%  |                                                                              |===================================                                   |  50%  |                                                                              |==========================================                            |  60%  |                                                                              |=================================================                     |  70%  |                                                                              |========================================================              |  80%  |                                                                              |===============================================================       |  90%  |                                                                              |======================================================================| 100%</span></span>
-<span><span class="co">#&gt; max diffusion time: 16384</span></span>
+<span><span class="co">#&gt; Converting diffusion operators to sparse matrices...</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Max diffusion time: 16384</span></span>
 <span><span class="co"># Generate initial state for each gene</span></span>
 <span><span class="va">rho</span> <span class="op">=</span> <span class="fu"><a href="../reference/RowwiseNormalize.html">RowwiseNormalize</a></span><span class="op">(</span><span class="va">dat</span><span class="op">[</span>,<span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">W</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Check the diffsued state of Fcnb</span></span>
-<span><span class="va">gene</span> <span class="op">=</span> <span class="st">"Fcnb"</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/warning.html" class="external-link">suppressWarnings</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="fu"><a href="../reference/VisualizeDiffusion.html">VisualizeDiffusion</a></span><span class="op">(</span>coord <span class="op">=</span> <span class="va">visual_space</span>,init_state <span class="op">=</span> <span class="va">rho</span><span class="op">[</span><span class="va">gene</span>,<span class="op">]</span>,P_ls <span class="op">=</span> <span class="va">P_ls</span>,check_time <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>,<span class="fl">2</span><span class="op">^</span><span class="fl">4</span>,<span class="fl">2</span><span class="op">^</span><span class="fl">10</span><span class="op">)</span>,gene_name <span class="op">=</span> <span class="va">gene</span><span class="op">)</span> <span class="op">&amp;</span> </span>
-<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span></span>
-<span>    plot.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.7</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>    plot.subtitle <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.7</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>    legend.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.7</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>    legend.text <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.7</span><span class="op">)</span><span class="op">)</span> <span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
+<p>Here we visualize the diffused state of <em>Fcnb</em> - a marker for
+granulocytopoietic cells, at four different time points:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>t</mi><mo>=</mo><mn>0</mn><mo>,</mo><mi>t</mi><mo>=</mo><msup><mn>2</mn><mn>1</mn></msup><mo>,</mo><mi>t</mi><mo>=</mo><msup><mn>2</mn><mn>4</mn></msup><mo>,</mo></mrow><annotation encoding="application/x-tex">t=0,t=2^1,t=2^4,</annotation></semantics></math>
+and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>t</mi><mo>=</mo><msup><mn>2</mn><mn>10</mn></msup></mrow><annotation encoding="application/x-tex">t=2^{10}</annotation></semantics></math>.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">gene</span> <span class="op">=</span> <span class="st">"Fcnb"</span></span>
+<span><span class="fu"><a href="../reference/VisualizeDiffusion.html">VisualizeDiffusion</a></span><span class="op">(</span>coord <span class="op">=</span> <span class="va">visual_space</span>,init_state <span class="op">=</span> <span class="va">rho</span><span class="op">[</span><span class="va">gene</span>,<span class="op">]</span>,P_ls <span class="op">=</span> <span class="va">P_ls</span>,check_time <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>,<span class="fl">2</span>,<span class="fl">2</span><span class="op">^</span><span class="fl">4</span>,<span class="fl">2</span><span class="op">^</span><span class="fl">10</span><span class="op">)</span>,gene_name <span class="op">=</span> <span class="va">gene</span><span class="op">)</span> <span class="op">&amp;</span> </span>
+<span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span></span>
+<span>  plot.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.7</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  plot.subtitle <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.7</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  legend.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.7</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  legend.text <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.7</span><span class="op">)</span><span class="op">)</span> <span class="op">)</span></span></code></pre></div>
 <p><img src="LMD_demo_files/figure-html/gene_diffusion-1.png" width="960"></p>
 </div>
 <div class="section level3">
 <h3 id="step3-obtain-diffusion-kl-score-lmd-score">Step3: Obtain Diffusion KL score &amp; LMD score<a class="anchor" aria-label="anchor" href="#step3-obtain-diffusion-kl-score-lmd-score"></a>
 </h3>
 <p>We measure the dynamics of the diffusion process for each gene using
-a score profile. This profile is calculated by the KL divergence between
-the initial state and the diffused state, and then normalizing it by the
-KL divergence between the initial state and the equilibrium state.</p>
+a score profile. This profile is calculated by the Kullback–Leibler (KL)
+divergence between the initial state and the diffused state, and then
+normalizing it by the KL divergence between the initial state and the
+equilibrium state.</p>
 <p>We summarize this score profile into the LMD score, which is the
 cumulative sum of the score profile at all dyadic time steps. This LMD
 score can be used to rank the genes. Both the score profile and the LMD
 score are calculated using <code>fast_get_lmds</code>.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">score_result</span> <span class="op">=</span> <span class="fu"><a href="../reference/fast_get_lmds.html">fast_get_lmds</a></span><span class="op">(</span>W <span class="op">=</span> <span class="va">W</span>, init_state <span class="op">=</span> <span class="va">rho</span>, P_ls <span class="op">=</span> <span class="va">P_ls</span>, largeData <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
-<p>Now, we visualize three sets of genes with different entropy
-levels:</p>
-<ul>
-<li><p>Small entropy: <em>Tlr11</em>, <em>4933425H06Rik</em></p></li>
-<li><p>Medium entropy: <em>Fcnb</em>, <em>Uchl4</em></p></li>
-<li><p>Large entropy: <em>Cd79a</em>, <em>Dock11</em></p></li>
-</ul>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">score_result</span> <span class="op">=</span> <span class="fu"><a href="../reference/fast_get_lmds.html">fast_get_lmds</a></span><span class="op">(</span>W <span class="op">=</span> <span class="va">W</span>, init_state <span class="op">=</span> <span class="va">rho</span>, P_ls <span class="op">=</span> <span class="va">P_ls</span>, largeData <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
+<p>Now, we visualize three sets of genes expressing in different number
+of cells:</p>
+<ul>
+<li><p>Expressed in approximately
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>20</mn><annotation encoding="application/x-tex">20</annotation></semantics></math>
+cells: <em>Tlr11</em>, <em>4933425H06Rik</em></p></li>
+<li><p>Expressed in approximately
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>500</mn><annotation encoding="application/x-tex">500</annotation></semantics></math>
+cells: <em>Fcnb</em>, <em>Uchl4</em></p></li>
+<li><p>Expressed in approximately
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mo>,</mo><mn>500</mn></mrow><annotation encoding="application/x-tex">2,500</annotation></semantics></math>
+cells: <em>Cd79a</em>, <em>Dock11</em></p></li>
+</ul>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">genes</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Tlr11"</span>,<span class="st">"Fcnb"</span>,<span class="st">"Cd79a"</span>,<span class="st">"4933425H06Rik"</span>,<span class="st">"Uchl4"</span>,<span class="st">"Dock11"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://satijalab.org/seurat/reference/FeaturePlot.html" class="external-link">FeaturePlot</a></span><span class="op">(</span><span class="va">tiss</span>, features <span class="op">=</span> <span class="va">genes</span>, ncol <span class="op">=</span> <span class="fl">3</span>, order <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/SeuratTheme.html" class="external-link">NoAxes</a></span><span class="op">(</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span>plot.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.5</span><span class="op">)</span><span class="op">)</span>, legend.text <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.5</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p><img src="LMD_demo_files/figure-html/unnamed-chunk-8-1.png" width="672"></p>
+<p><img src="LMD_demo_files/figure-html/unnamed-chunk-10-1.png" width="672"></p>
 <p>We visualize the score profiles for genes above. Genes with more
 localized patterns (<em>Tlr11</em>, <em>Fcnb</em>, <em>Cd79a</em>) tend
-to have smaller LMD scores (area under the curve).</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+to have smaller LMD scores (area under the curve) regardless of the
+number of cells in which they are expressed.</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">genes_label</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"localized"</span>,<span class="st">"non_localized"</span><span class="op">)</span>,each <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/VisualizeScorePattern.html">VisualizeScorePattern</a></span><span class="op">(</span><span class="va">score_result</span><span class="op">$</span><span class="st">'score_profile'</span>, genes <span class="op">=</span> <span class="va">genes</span>, label_class <span class="op">=</span> <span class="va">genes_label</span>, facet_class <span class="op">=</span> <span class="cn">NULL</span>, text <span class="op">=</span> <span class="cn">TRUE</span>, normalize <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span></span>
 <span>    plot.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.7</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -283,7 +302,7 @@ to have smaller LMD scores (area under the curve).</p>
 <p><img src="LMD_demo_files/figure-html/score_profile-1.png" width="576"></p>
 <p>The results of the LMD can be presented in a table, displaying the
 LMD score and the rank for each gene.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">=</span> <span class="fu"><a href="../reference/show_result_lmd.html">show_result_lmd</a></span><span class="op">(</span><span class="va">score_result</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">gene_table</span>,<span class="fl">10</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                  score rank</span></span>
@@ -314,7 +333,17 @@ of the cell-cell kNN graph.</p></li>
 </ul>
 <p>This example dataset contains 5,037 cells, running <code>LMD</code>
 should take 1 to 3 minutes to finish.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<p><strong>Note</strong>: The actual runtime can vary depending on your
+system’s matrix operation performance. To potentially reduce runtime and
+enhance performance, ensure that your R environment is configured with
+optimized BLAS/LAPACK libraries, such as OpenBLAS, which support
+parallel processing. For details on the specific setup used in this
+tutorial, please refer to <a href="#session-information">Session
+information</a>.</p>
+<p>For more information on installing and configuring these libraries,
+visit <a href="https://www.openblas.net/" class="external-link">OpenBLAS</a> and <a href="https://cran.r-project.org/doc/manuals/r-release/R-admin.html#OpenBLAS-and-BLIS" class="external-link">R
+Administration and Installation</a>.</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Load packages</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ruiqi0130.github.io/LocalizedMarkerDetector/" class="external-link">LocalizedMarkerDetector</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/jabiru/tictoc" class="external-link">tictoc</a></span><span class="op">)</span></span>
@@ -322,16 +351,16 @@ should take 1 to 3 minutes to finish.</p>
 <span><span class="fu"><a href="https://rdrr.io/pkg/tictoc/man/tic.html" class="external-link">tic</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">score_result</span> <span class="op">=</span> <span class="fu"><a href="../reference/LMD.html">LMD</a></span><span class="op">(</span><span class="va">dat</span>, <span class="va">feature_space</span>, knn <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Constructing KNN graph</span></span>
-<span><span class="co">#&gt; Remove 0 genes which express at less than 5 cells</span></span>
-<span><span class="co">#&gt; Calculate LMD score profile for large data</span></span>
-<span><span class="co">#&gt; Doubly Stochastic</span></span>
+<span><span class="co">#&gt; Remove 0 genes which express in less than 5 cells</span></span>
+<span><span class="co">#&gt; Calculate LMD score profile for large data...</span></span>
+<span><span class="co">#&gt; Run doubly stochastic on affinity matrix...</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; max diffusion time:2^ 14</span></span>
 <span><span class="fu"><a href="https://rdrr.io/pkg/tictoc/man/tic.html" class="external-link">toc</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; 171.41 sec elapsed</span></span></code></pre></div>
+<span><span class="co">#&gt; 169.99 sec elapsed</span></span></code></pre></div>
 <p>Present the results of LMD in a table: the LMD score and the rank for
 each gene.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">=</span> <span class="fu"><a href="../reference/show_result_lmd.html">show_result_lmd</a></span><span class="op">(</span><span class="va">score_result</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">gene_table</span>,<span class="fl">10</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                  score rank</span></span>
@@ -351,9 +380,9 @@ each gene.</p>
 </h2>
 <p>First, we select the top localized genes based on the knee point of
 the LMDS distribution.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">=</span> <span class="fu"><a href="../reference/show_result_lmd.html">show_result_lmd</a></span><span class="op">(</span><span class="va">score_result</span>, kneeplot <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
-<p><img src="LMD_demo_files/figure-html/unnamed-chunk-12-1.png" width="480"></p>
+<p><img src="LMD_demo_files/figure-html/unnamed-chunk-14-1.png" width="480"></p>
 <pre><code><span><span class="co">#&gt; knee_point:  1741</span></span>
 <span><span class="va">top_lmd_genes</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">cut_off_gene</span><span class="op">)</span></span></code></pre>
 <p>Next, we compute the gene-gene pairwise Jaccard distance based on
@@ -362,9 +391,16 @@ their expression levels over all cells using
 imputation<span class="citation">(Linderman et al. 2022)</span> first to
 reduce the effect of drop-out events on the gene distance
 calculations.</p>
-<p><strong>Note</strong>: This step is time-consuming and may take 4 to
-5 minutes to complete.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<p><strong>Notes</strong>:</p>
+<ol style="list-style-type: decimal">
+<li><p>ALRA may produce different results with each run, leading to
+slight variations in the gene-gene distance and gene clustering results
+For reproducibility with this tutorial, users can download our <a href="https://figshare.com/ndownloader/files/48627340" class="external-link">preprocessed
+Seurat object</a>, which includes the ALRA assay.</p></li>
+<li><p>This step is time-consuming and may take 4 to 5 minutes to
+complete.</p></li>
+</ol>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># tic()</span></span>
 <span><span class="co"># ALRA imputation</span></span>
 <span><span class="kw">if</span><span class="op">(</span><span class="op">!</span><span class="st">"alra"</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">tiss</span><span class="op">@</span><span class="va">assays</span><span class="op">)</span><span class="op">)</span><span class="op">{</span></span>
@@ -383,16 +419,16 @@ cluster the genes using <code><a href="https://rdrr.io/r/stats/hclust.html" clas
 outlier genes in each module with SML algorithm<span class="citation">(Parisi et al. 2014)</span> and discard modules
 containing fewer than 10 genes. All of these steps are performed using
 <code>ClusterGenes</code>.</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">gene_partition</span> <span class="op">=</span> <span class="fu"><a href="../reference/ClusterGenes.html">ClusterGenes</a></span><span class="op">(</span><span class="va">dist</span>, clustering_method <span class="op">=</span> <span class="st">"average"</span>, return_tree <span class="op">=</span> <span class="cn">TRUE</span>, deepSplit <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">gene_cl_res</span> <span class="op">=</span> <span class="fu"><a href="../reference/ClusterGenes.html">ClusterGenes</a></span><span class="op">(</span><span class="va">dist</span>, clustering_method <span class="op">=</span> <span class="st">"average"</span>, return_tree <span class="op">=</span> <span class="cn">TRUE</span>, deepSplit <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="co">#&gt;  ..cutHeight not given, setting it to 0.976  ===&gt;  99% of the (truncated) height range in dendro.</span></span>
 <span><span class="co">#&gt;  ..done.</span></span>
 <span><span class="co">#&gt; Filtering out outlier genes in each module:  1684  genes left.</span></span></code></pre></div>
 <p>We can visualize the pairwise distance matrix of genes. The sidebar
 and side tree represent the partitioning of genes into gene modules.</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/VisualizeGeneHeatmap.html">VisualizeGeneHeatmap</a></span><span class="op">(</span><span class="va">dist</span>, gene_partition <span class="op">=</span> <span class="va">gene_partition</span><span class="op">$</span><span class="va">gene_partition</span>, gene_hree <span class="op">=</span> <span class="va">gene_partition</span><span class="op">$</span><span class="va">gene_hree</span><span class="op">)</span></span></code></pre></div>
-<p><img src="LMD_demo_files/figure-html/unnamed-chunk-15-1.png" width="480"></p>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/VisualizeGeneHeatmap.html">VisualizeGeneHeatmap</a></span><span class="op">(</span><span class="va">dist</span>, gene_partition <span class="op">=</span> <span class="va">gene_cl_res</span><span class="op">$</span><span class="va">gene_partition</span>, gene_hree <span class="op">=</span> <span class="va">gene_cl_res</span><span class="op">$</span><span class="va">gene_hree</span><span class="op">)</span></span></code></pre></div>
+<p><img src="LMD_demo_files/figure-html/unnamed-chunk-17-1.png" width="480"></p>
 </div>
 <div class="section level2">
 <h2 id="computing-per-cell-module-activity-scores">Computing Per-Cell Module Activity Scores<a class="anchor" aria-label="anchor" href="#computing-per-cell-module-activity-scores"></a>
@@ -406,23 +442,63 @@ corresponding cells.</p>
 minutes to complete. We also suggest considering alternative methods,
 such as <a href="https://satijalab.org/seurat/reference/addmodulescore" class="external-link"><code>Seurat::AddModuleScore</code></a>,
 to visualize the gene module on cell embedding.</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">gene_partition</span> <span class="op">=</span> <span class="va">gene_partition</span><span class="op">$</span><span class="va">gene_partition</span></span>
-<span><span class="va">tiss</span> <span class="op">=</span> <span class="fu"><a href="../reference/AddModuleActivityScore.html">AddModuleActivityScore</a></span><span class="op">(</span><span class="va">tiss</span>, gene_partition <span class="op">=</span> <span class="va">gene_partition</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://patchwork.data-imaginist.com" class="external-link">patchwork</a></span><span class="op">)</span></span>
-<span><span class="co"># Visualize patterns</span></span>
+<code class="sourceCode R"><span><span class="va">gene_partition</span> <span class="op">=</span> <span class="va">gene_cl_res</span><span class="op">$</span><span class="va">gene_partition</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/levels.html" class="external-link">levels</a></span><span class="op">(</span><span class="va">gene_partition</span><span class="op">)</span> <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fu"><a href="https://rdrr.io/r/base/nlevels.html" class="external-link">nlevels</a></span><span class="op">(</span><span class="va">gene_partition</span><span class="op">)</span> <span class="co"># rename gene modules</span></span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tiss</span> <span class="op">=</span> <span class="fu"><a href="../reference/AddModuleActivityScore.html">AddModuleActivityScore</a></span><span class="op">(</span><span class="va">tiss</span>, gene_partition <span class="op">=</span> <span class="va">gene_partition</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Visualize patterns</span></span>
 <span><span class="op">(</span><span class="fu"><a href="https://satijalab.org/seurat/reference/FeaturePlot.html" class="external-link">FeaturePlot</a></span><span class="op">(</span><span class="va">tiss</span>, features <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">tiss</span><span class="op">@</span><span class="va">meta.data</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">"Module"</span>,<span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">tiss</span><span class="op">@</span><span class="va">meta.data</span><span class="op">)</span><span class="op">)</span><span class="op">]</span>, order <span class="op">=</span> <span class="cn">TRUE</span>, reduction <span class="op">=</span> <span class="st">"tsne"</span>, ncol <span class="op">=</span> <span class="fl">5</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/SeuratTheme.html" class="external-link">NoAxes</a></span><span class="op">(</span><span class="op">)</span> <span class="op">&amp;</span> </span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_gradient.html" class="external-link">scale_color_gradient</a></span><span class="op">(</span>low <span class="op">=</span> <span class="st">"lightgrey"</span>, high <span class="op">=</span> <span class="st">"blue"</span>, limits <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>,<span class="fl">1</span><span class="op">)</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>color <span class="op">=</span> <span class="st">"ModuleScore"</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span></span>
 <span>    plot.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.5</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>    legend.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.5</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>    legend.text <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.5</span><span class="op">)</span><span class="op">)</span> <span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://patchwork.data-imaginist.com/reference/plot_layout.html" class="external-link">plot_layout</a></span><span class="op">(</span>guides <span class="op">=</span> <span class="st">"collect"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="LMD_demo_files/figure-html/gene_module-1.png" width="960"></p>
+<p>We can take a closer look at a module by examining several of its top
+localized genes.</p>
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">module_id</span> <span class="op">=</span> <span class="fl">19</span></span>
+<span><span class="va">p1</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/FeaturePlot.html" class="external-link">FeaturePlot</a></span><span class="op">(</span><span class="va">tiss</span>, features <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"Module"</span>,<span class="va">module_id</span><span class="op">)</span>, order <span class="op">=</span> <span class="cn">TRUE</span>, reduction <span class="op">=</span> <span class="st">"tsne"</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">ggtitle</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"Module%s (%d genes)"</span>,<span class="va">module_id</span>,<span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">gene_partition</span> <span class="op">==</span> <span class="va">module_id</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>color <span class="op">=</span> <span class="st">"ModuleScore"</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/SeuratTheme.html" class="external-link">NoAxes</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">pl</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/FeaturePlot.html" class="external-link">FeaturePlot</a></span><span class="op">(</span><span class="va">tiss</span>, features <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gene_partition</span><span class="op">)</span><span class="op">[</span><span class="va">gene_partition</span> <span class="op">==</span> <span class="va">module_id</span><span class="op">]</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">6</span><span class="op">]</span>,ncol <span class="op">=</span> <span class="fl">3</span>, order <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/SeuratTheme.html" class="external-link">NoAxes</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">p</span> <span class="op">=</span> <span class="op">(</span><span class="va">p1</span> <span class="op">+</span> <span class="va">pl</span> <span class="op">+</span> <span class="fu"><a href="https://patchwork.data-imaginist.com/reference/plot_layout.html" class="external-link">plot_layout</a></span><span class="op">(</span>design <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"#BBB\nABBB\nABBB\n#BBB"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span></span>
+<span>    plot.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.5</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    legend.title <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.5</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    legend.text <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.5</span><span class="op">)</span><span class="op">)</span> <span class="op">)</span></span>
+<span><span class="va">p</span></span></code></pre></div>
+<p><img src="LMD_demo_files/figure-html/gene_module_genes-1.png" width="960"></p>
+<p>To better understand the biological functions of these gene modules,
+we can perform a series of functional enrichment analyses, such as Gene
+Ontology (GO) enrichment analysis<span class="citation">(Wu et al.
+2021)</span> or Reactome Pathway Database enrichment analysis<span class="citation">(Yu and He 2016)</span>. Here, we demonstrate the
+Reactome Pathway Database enrichment analysis using
+<code><a href="https://rdrr.io/pkg/ReactomePA/man/enrichPathway.html" class="external-link">ReactomePA::enrichPathway</a></code> for previous selected gene
+module, and we print its top 5 significantly enriched pathways.</p>
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://yulab-smu.top/biomedical-knowledge-mining-book/" class="external-link">ReactomePA</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">org.Mm.eg.db</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">bg_genes</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">dat</span><span class="op">)</span> <span class="co"># Set all genes(after filtering) in the expression matrix as background genes</span></span>
+<span><span class="va">universe_df</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span><span class="st">"symbol"</span> <span class="op">=</span> <span class="va">bg_genes</span>,<span class="st">"entrez"</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/pkg/AnnotationDbi/man/AnnotationDb-class.html" class="external-link">mapIds</a></span><span class="op">(</span><span class="va">org.Mm.eg.db</span>, keys<span class="op">=</span><span class="va">bg_genes</span>, column<span class="op">=</span><span class="st">"ENTREZID"</span>, keytype<span class="op">=</span><span class="st">"SYMBOL"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">universe_df</span> <span class="op">=</span> <span class="va">universe_df</span><span class="op">[</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">universe_df</span><span class="op">$</span><span class="va">entrez</span><span class="op">)</span>,<span class="op">]</span></span>
+<span><span class="va">epathway_result</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/ReactomePA/man/enrichPathway.html" class="external-link">enrichPathway</a></span><span class="op">(</span>gene<span class="op">=</span><span class="va">universe_df</span><span class="op">[</span><span class="va">universe_df</span><span class="op">$</span><span class="va">symbol</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gene_partition</span><span class="op">)</span><span class="op">[</span><span class="va">gene_partition</span> <span class="op">==</span> <span class="va">module_id</span><span class="op">]</span>,<span class="st">"entrez"</span><span class="op">]</span>,</span>
+<span>                organism <span class="op">=</span> <span class="st">"mouse"</span>,</span>
+<span>                pAdjustMethod <span class="op">=</span> <span class="st">"BH"</span>,</span>
+<span>                pvalueCutoff <span class="op">=</span> <span class="fl">0.05</span>,</span>
+<span>                universe <span class="op">=</span> <span class="va">universe_df</span><span class="op">$</span><span class="va">entrez</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">epathway_result</span><span class="op">@</span><span class="va">result</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span>,<span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">'Description'</span>, <span class="st">'GeneRatio'</span>, <span class="st">'p.adjust'</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="co">#&gt;                          Description GeneRatio     p.adjust</span></span>
+<span><span class="co">#&gt; R-MMU-1640170             Cell Cycle     30/47 3.388436e-23</span></span>
+<span><span class="co">#&gt; R-MMU-69278      Cell Cycle, Mitotic     28/47 7.167466e-23</span></span>
+<span><span class="co">#&gt; R-MMU-68886                  M Phase     21/47 6.462027e-17</span></span>
+<span><span class="co">#&gt; R-MMU-68877     Mitotic Prometaphase     18/47 1.268621e-16</span></span>
+<span><span class="co">#&gt; R-MMU-69620   Cell Cycle Checkpoints     18/47 1.228419e-15</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="session-information">Session information<a class="anchor" aria-label="anchor" href="#session-information"></a>
 </h2>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/sessionInfo.html" class="external-link">sessionInfo</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; R version 4.1.3 (2022-03-10)</span></span>
 <span><span class="co">#&gt; Platform: x86_64-pc-linux-gnu (64-bit)</span></span>
@@ -441,64 +517,80 @@ to visualize the gene module on cell embedding.</p>
 <span><span class="co">#&gt; [11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; attached base packages:</span></span>
-<span><span class="co">#&gt; [1] stats     graphics  grDevices utils     datasets  methods   base     </span></span>
+<span><span class="co">#&gt; [1] stats4    stats     graphics  grDevices utils     datasets  methods  </span></span>
+<span><span class="co">#&gt; [8] base     </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; other attached packages:</span></span>
-<span><span class="co">#&gt; [1] patchwork_1.1.2               ggplot2_3.3.6                </span></span>
-<span><span class="co">#&gt; [3] tictoc_1.2                    SeuratWrappers_0.3.1         </span></span>
-<span><span class="co">#&gt; [5] SeuratObject_4.1.3            Seurat_4.3.0.1               </span></span>
-<span><span class="co">#&gt; [7] LocalizedMarkerDetector_1.0.0</span></span>
+<span><span class="co">#&gt;  [1] org.Mm.eg.db_3.14.0           AnnotationDbi_1.56.2         </span></span>
+<span><span class="co">#&gt;  [3] IRanges_2.28.0                S4Vectors_0.32.4             </span></span>
+<span><span class="co">#&gt;  [5] Biobase_2.54.0                BiocGenerics_0.40.0          </span></span>
+<span><span class="co">#&gt;  [7] ReactomePA_1.38.0             patchwork_1.1.2              </span></span>
+<span><span class="co">#&gt;  [9] ggplot2_3.3.6                 tictoc_1.2                   </span></span>
+<span><span class="co">#&gt; [11] SeuratWrappers_0.3.1          SeuratObject_4.1.3           </span></span>
+<span><span class="co">#&gt; [13] Seurat_4.3.0.1                LocalizedMarkerDetector_1.0.0</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; loaded via a namespace (and not attached):</span></span>
-<span><span class="co">#&gt;   [1] systemfonts_1.1.0      plyr_1.8.7             igraph_1.3.4          </span></span>
-<span><span class="co">#&gt;   [4] lazyeval_0.2.2         sp_1.5-0               splines_4.1.3         </span></span>
-<span><span class="co">#&gt;   [7] listenv_0.8.0          scattermore_0.8        digest_0.6.36         </span></span>
-<span><span class="co">#&gt;  [10] yulab.utils_0.0.9      htmltools_0.5.8.1      viridis_0.6.2         </span></span>
-<span><span class="co">#&gt;  [13] fansi_1.0.3            memoise_2.0.1          magrittr_2.0.3        </span></span>
-<span><span class="co">#&gt;  [16] tensor_1.5             cluster_2.1.2          ROCR_1.0-11           </span></span>
-<span><span class="co">#&gt;  [19] remotes_2.4.2          globals_0.16.0         graphlayouts_1.0.0    </span></span>
-<span><span class="co">#&gt;  [22] matrixStats_0.62.0     R.utils_2.12.0         pkgdown_2.1.0         </span></span>
-<span><span class="co">#&gt;  [25] spatstat.sparse_3.0-2  prettyunits_1.1.1      colorspace_2.0-3      </span></span>
-<span><span class="co">#&gt;  [28] ggrepel_0.9.1          textshaping_0.4.0      xfun_0.46             </span></span>
-<span><span class="co">#&gt;  [31] dplyr_1.1.3            crayon_1.5.1           jsonlite_1.8.8        </span></span>
-<span><span class="co">#&gt;  [34] progressr_0.10.1       spatstat.data_3.0-1    survival_3.2-13       </span></span>
-<span><span class="co">#&gt;  [37] zoo_1.8-10             glue_1.6.2             polyclip_1.10-0       </span></span>
-<span><span class="co">#&gt;  [40] gtable_0.3.0           leiden_0.4.2           future.apply_1.9.0    </span></span>
-<span><span class="co">#&gt;  [43] abind_1.4-5            scales_1.2.1           pheatmap_1.0.12       </span></span>
-<span><span class="co">#&gt;  [46] DBI_1.1.3              spatstat.random_3.1-5  miniUI_0.1.1.1        </span></span>
-<span><span class="co">#&gt;  [49] Rcpp_1.0.9             progress_1.2.2         viridisLite_0.4.1     </span></span>
-<span><span class="co">#&gt;  [52] xtable_1.8-4           gridGraphics_0.5-1     reticulate_1.25       </span></span>
-<span><span class="co">#&gt;  [55] latex2exp_0.9.6        rsvd_1.0.5             htmlwidgets_1.5.4     </span></span>
-<span><span class="co">#&gt;  [58] httr_1.4.4             FNN_1.1.3.1            RColorBrewer_1.1-3    </span></span>
-<span><span class="co">#&gt;  [61] ellipsis_0.3.2         ica_1.0-3              R.methodsS3_1.8.2     </span></span>
-<span><span class="co">#&gt;  [64] pkgconfig_2.0.3        farver_2.1.1           sass_0.4.9            </span></span>
-<span><span class="co">#&gt;  [67] uwot_0.1.14            deldir_1.0-6           utf8_1.2.2            </span></span>
-<span><span class="co">#&gt;  [70] dynamicTreeCut_1.63-1  ggplotify_0.1.2        labeling_0.4.2        </span></span>
-<span><span class="co">#&gt;  [73] tidyselect_1.2.0       rlang_1.1.1            reshape2_1.4.4        </span></span>
-<span><span class="co">#&gt;  [76] later_1.3.0            munsell_0.5.0          tools_4.1.3           </span></span>
-<span><span class="co">#&gt;  [79] cachem_1.0.6           cli_3.6.1              dbscan_1.1-12         </span></span>
-<span><span class="co">#&gt;  [82] generics_0.1.3         ggridges_0.5.3         evaluate_0.24.0       </span></span>
-<span><span class="co">#&gt;  [85] stringr_1.4.1          fastmap_1.2.0          yaml_2.3.10           </span></span>
-<span><span class="co">#&gt;  [88] ragg_1.3.2             goftest_1.2-3          knitr_1.48            </span></span>
-<span><span class="co">#&gt;  [91] fs_1.6.4               fitdistrplus_1.1-8     tidygraph_1.2.3       </span></span>
-<span><span class="co">#&gt;  [94] purrr_1.0.2            RANN_2.6.1             ggraph_2.1.0          </span></span>
-<span><span class="co">#&gt;  [97] pbapply_1.5-0          future_1.27.0          nlme_3.1-155          </span></span>
-<span><span class="co">#&gt; [100] mime_0.12              R.oo_1.25.0            compiler_4.1.3        </span></span>
-<span><span class="co">#&gt; [103] rstudioapi_0.14        plotly_4.10.0          png_0.1-7             </span></span>
-<span><span class="co">#&gt; [106] spatstat.utils_3.0-5   tibble_3.2.1           tweenr_2.0.2          </span></span>
-<span><span class="co">#&gt; [109] bslib_0.8.0            stringi_1.7.8          highr_0.11            </span></span>
-<span><span class="co">#&gt; [112] RSpectra_0.16-1        desc_1.4.3             lattice_0.20-45       </span></span>
-<span><span class="co">#&gt; [115] Matrix_1.6-1           vctrs_0.6.3            pillar_1.9.0          </span></span>
-<span><span class="co">#&gt; [118] lifecycle_1.0.3        BiocManager_1.30.18    spatstat.geom_3.2-5   </span></span>
-<span><span class="co">#&gt; [121] lmtest_0.9-40          jquerylib_0.1.4        RcppAnnoy_0.0.19      </span></span>
-<span><span class="co">#&gt; [124] data.table_1.14.2      cowplot_1.1.1          irlba_2.3.5           </span></span>
-<span><span class="co">#&gt; [127] httpuv_1.6.5           R6_2.5.1               promises_1.2.0.1      </span></span>
-<span><span class="co">#&gt; [130] KernSmooth_2.23-20     gridExtra_2.3          parallelly_1.32.1     </span></span>
-<span><span class="co">#&gt; [133] codetools_0.2-18       MASS_7.3-55            philentropy_0.7.0     </span></span>
-<span><span class="co">#&gt; [136] withr_2.5.0            sctransform_0.3.5      hms_1.1.2             </span></span>
-<span><span class="co">#&gt; [139] parallel_4.1.3         grid_4.1.3             tidyr_1.2.0           </span></span>
-<span><span class="co">#&gt; [142] rmarkdown_2.27         Rtsne_0.16             spatstat.explore_3.2-1</span></span>
-<span><span class="co">#&gt; [145] ggforce_0.4.1          shiny_1.7.2</span></span></code></pre></div>
+<span><span class="co">#&gt;   [1] utf8_1.2.2             spatstat.explore_3.2-1 reticulate_1.25       </span></span>
+<span><span class="co">#&gt;   [4] R.utils_2.12.0         tidyselect_1.2.0       RSQLite_2.2.16        </span></span>
+<span><span class="co">#&gt;   [7] htmlwidgets_1.5.4      grid_4.1.3             BiocParallel_1.28.3   </span></span>
+<span><span class="co">#&gt;  [10] Rtsne_0.16             scatterpie_0.2.1       munsell_0.5.0         </span></span>
+<span><span class="co">#&gt;  [13] codetools_0.2-18       ragg_1.3.2             ica_1.0-3             </span></span>
+<span><span class="co">#&gt;  [16] future_1.27.0          miniUI_0.1.1.1         withr_2.5.0           </span></span>
+<span><span class="co">#&gt;  [19] GOSemSim_2.20.0        spatstat.random_3.1-5  colorspace_2.0-3      </span></span>
+<span><span class="co">#&gt;  [22] progressr_0.10.1       highr_0.11             knitr_1.48            </span></span>
+<span><span class="co">#&gt;  [25] rstudioapi_0.14        ROCR_1.0-11            tensor_1.5            </span></span>
+<span><span class="co">#&gt;  [28] DOSE_3.20.1            listenv_0.8.0          labeling_0.4.2        </span></span>
+<span><span class="co">#&gt;  [31] GenomeInfoDbData_1.2.7 polyclip_1.10-0        bit64_4.0.5           </span></span>
+<span><span class="co">#&gt;  [34] farver_2.1.1           pheatmap_1.0.12        treeio_1.18.1         </span></span>
+<span><span class="co">#&gt;  [37] parallelly_1.32.1      vctrs_0.6.3            generics_0.1.3        </span></span>
+<span><span class="co">#&gt;  [40] xfun_0.46              GenomeInfoDb_1.30.1    R6_2.5.1              </span></span>
+<span><span class="co">#&gt;  [43] graphlayouts_1.0.0     rsvd_1.0.5             fgsea_1.20.0          </span></span>
+<span><span class="co">#&gt;  [46] bitops_1.0-7           spatstat.utils_3.0-5   cachem_1.0.6          </span></span>
+<span><span class="co">#&gt;  [49] gridGraphics_0.5-1     promises_1.2.0.1       scales_1.2.1          </span></span>
+<span><span class="co">#&gt;  [52] enrichplot_1.14.2      ggraph_2.1.0           gtable_0.3.0          </span></span>
+<span><span class="co">#&gt;  [55] globals_0.16.0         goftest_1.2-3          tidygraph_1.2.3       </span></span>
+<span><span class="co">#&gt;  [58] rlang_1.1.1            systemfonts_1.1.0      splines_4.1.3         </span></span>
+<span><span class="co">#&gt;  [61] lazyeval_0.2.2         checkmate_2.1.0        spatstat.geom_3.2-5   </span></span>
+<span><span class="co">#&gt;  [64] BiocManager_1.30.18    yaml_2.3.10            reshape2_1.4.4        </span></span>
+<span><span class="co">#&gt;  [67] abind_1.4-5            backports_1.4.1        httpuv_1.6.5          </span></span>
+<span><span class="co">#&gt;  [70] qvalue_2.26.0          tools_4.1.3            ggplotify_0.1.2       </span></span>
+<span><span class="co">#&gt;  [73] ellipsis_0.3.2         jquerylib_0.1.4        RColorBrewer_1.1-3    </span></span>
+<span><span class="co">#&gt;  [76] dynamicTreeCut_1.63-1  ggridges_0.5.3         latex2exp_0.9.6       </span></span>
+<span><span class="co">#&gt;  [79] Rcpp_1.0.9             plyr_1.8.7             zlibbioc_1.40.0       </span></span>
+<span><span class="co">#&gt;  [82] progress_1.2.2         RCurl_1.98-1.8         purrr_1.0.2           </span></span>
+<span><span class="co">#&gt;  [85] prettyunits_1.1.1      dbscan_1.1-12          deldir_1.0-6          </span></span>
+<span><span class="co">#&gt;  [88] pbapply_1.5-0          viridis_0.6.2          cowplot_1.1.1         </span></span>
+<span><span class="co">#&gt;  [91] zoo_1.8-10             ggrepel_0.9.1          cluster_2.1.2         </span></span>
+<span><span class="co">#&gt;  [94] fs_1.6.4               magrittr_2.0.3         data.table_1.14.2     </span></span>
+<span><span class="co">#&gt;  [97] RSpectra_0.16-1        scattermore_0.8        DO.db_2.9             </span></span>
+<span><span class="co">#&gt; [100] reactome.db_1.77.0     lmtest_0.9-40          RANN_2.6.1            </span></span>
+<span><span class="co">#&gt; [103] fitdistrplus_1.1-8     matrixStats_0.62.0     hms_1.1.2             </span></span>
+<span><span class="co">#&gt; [106] mime_0.12              evaluate_0.24.0        xtable_1.8-4          </span></span>
+<span><span class="co">#&gt; [109] gridExtra_2.3          compiler_4.1.3         tibble_3.2.1          </span></span>
+<span><span class="co">#&gt; [112] shadowtext_0.1.2       KernSmooth_2.23-20     crayon_1.5.1          </span></span>
+<span><span class="co">#&gt; [115] R.oo_1.25.0            htmltools_0.5.8.1      ggfun_0.1.3           </span></span>
+<span><span class="co">#&gt; [118] later_1.3.0            aplot_0.2.1            tidyr_1.2.0           </span></span>
+<span><span class="co">#&gt; [121] DBI_1.1.3              tweenr_2.0.2           rappdirs_0.3.3        </span></span>
+<span><span class="co">#&gt; [124] MASS_7.3-55            Matrix_1.6-1           cli_3.6.1             </span></span>
+<span><span class="co">#&gt; [127] R.methodsS3_1.8.2      parallel_4.1.3         igraph_1.3.4          </span></span>
+<span><span class="co">#&gt; [130] pkgconfig_2.0.3        pkgdown_2.1.0          sp_1.5-0              </span></span>
+<span><span class="co">#&gt; [133] philentropy_0.7.0      plotly_4.10.0          spatstat.sparse_3.0-2 </span></span>
+<span><span class="co">#&gt; [136] ggtree_3.2.1           bslib_0.8.0            XVector_0.34.0        </span></span>
+<span><span class="co">#&gt; [139] yulab.utils_0.0.9      stringr_1.4.1          digest_0.6.36         </span></span>
+<span><span class="co">#&gt; [142] sctransform_0.3.5      RcppAnnoy_0.0.19       graph_1.72.0          </span></span>
+<span><span class="co">#&gt; [145] Biostrings_2.62.0      spatstat.data_3.0-1    fastmatch_1.1-3       </span></span>
+<span><span class="co">#&gt; [148] rmarkdown_2.27         leiden_0.4.2           tidytree_0.4.5        </span></span>
+<span><span class="co">#&gt; [151] uwot_0.1.14            graphite_1.40.0        shiny_1.7.2           </span></span>
+<span><span class="co">#&gt; [154] lifecycle_1.0.3        nlme_3.1-155           jsonlite_1.8.8        </span></span>
+<span><span class="co">#&gt; [157] desc_1.4.3             viridisLite_0.4.1      fansi_1.0.3           </span></span>
+<span><span class="co">#&gt; [160] pillar_1.9.0           lattice_0.20-45        GO.db_3.14.0          </span></span>
+<span><span class="co">#&gt; [163] KEGGREST_1.34.0        fastmap_1.2.0          httr_1.4.4            </span></span>
+<span><span class="co">#&gt; [166] survival_3.2-13        glue_1.6.2             remotes_2.4.2         </span></span>
+<span><span class="co">#&gt; [169] FNN_1.1.3.1            png_0.1-7              bit_4.0.4             </span></span>
+<span><span class="co">#&gt; [172] ggforce_0.4.1          stringi_1.7.8          sass_0.4.9            </span></span>
+<span><span class="co">#&gt; [175] blob_1.2.3             textshaping_0.4.0      memoise_2.0.1         </span></span>
+<span><span class="co">#&gt; [178] dplyr_1.1.3            ape_5.6-2              irlba_2.3.5           </span></span>
+<span><span class="co">#&gt; [181] future.apply_1.9.0</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 class="unnumbered" id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
@@ -530,6 +622,17 @@ Parisi, Fabio, Francesco Strino, Boaz Nadler, and Yuval Kluger. 2014.
 <span>“Ranking and Combining Multiple Predictors Without Labeled
 Data.”</span> <em>Proceedings of the National Academy of Sciences</em>
 111 (4): 1253–58.
+</div>
+<div id="ref-wu2021clusterprofiler" class="csl-entry">
+Wu, Tianzhi, Erqiang Hu, Shuangbin Xu, Meijun Chen, Pingfan Guo, Zehan
+Dai, Tingze Feng, et al. 2021. <span>“clusterProfiler 4.0: A Universal
+Enrichment Tool for Interpreting Omics Data.”</span> <em>The
+Innovation</em> 2 (3).
+</div>
+<div id="ref-yu2016reactomepa" class="csl-entry">
+Yu, Guangchuang, and Qing-Yu He. 2016. <span>“ReactomePA: An
+r/Bioconductor Package for Reactome Pathway Analysis and
+Visualization.”</span> <em>Molecular BioSystems</em> 12 (2): 477–79.
 </div>
 </div>
 </div>

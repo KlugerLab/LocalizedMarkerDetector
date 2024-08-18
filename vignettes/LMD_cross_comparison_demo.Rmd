@@ -30,9 +30,14 @@ library("patchwork")
 ```
 
 This dataset includes a SmoM2 mutant sample with a paired wildtype sample, both collected at embryonic day 13.5. We can visualize these two samples using UMAP, with cells color-coded by cell types.
-```{r load_data, fig.height=3, fig.width=6, warning = FALSE, message=FALSE}
+```{r, warning = FALSE, message=FALSE}
 ##### Load Data
+dir.path0 = "~/" # Specify the directory path where the data is saved
+```
+```{r, warning = FALSE, message=FALSE, include = FALSE}
 source("../LMD-paper/paths.R")
+```
+```{r load_data, fig.height=3, fig.width=6, warning = FALSE, message=FALSE}
 data_S_MUT <- readRDS(file.path(dir.path0,"smom2/process_data/data_S_smom2_dermal_E13.5_MUT.rds"))
 data_S_CTL <- readRDS(file.path(dir.path0,"smom2/process_data/data_S_smom2_dermal_E13.5_CTL.rds"))
 

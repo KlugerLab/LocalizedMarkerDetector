@@ -110,8 +110,9 @@ sample, both collected at embryonic day 13.5. We can visualize these two
 samples using UMAP, with cells color-coded by cell types.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">##### Load Data</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"../LMD-paper/paths.R"</span><span class="op">)</span></span>
-<span><span class="va">data_S_MUT</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="st">"smom2/process_data/data_S_smom2_dermal_E13.5_MUT.rds"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">dir.path0</span> <span class="op">=</span> <span class="st">"~/"</span> <span class="co"># Specify the directory path where the data is saved</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">data_S_MUT</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="st">"smom2/process_data/data_S_smom2_dermal_E13.5_MUT.rds"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">data_S_CTL</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="st">"smom2/process_data/data_S_smom2_dermal_E13.5_CTL.rds"</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">p1</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/DimPlot.html" class="external-link">DimPlot</a></span><span class="op">(</span><span class="va">data_S_MUT</span>, </span>
@@ -125,7 +126,7 @@ samples using UMAP, with cells color-coded by cell types.</p>
 <h2 id="running-lmd-and-identifying-localized-gene-modules">Running LMD and Identifying localized gene modules<a class="anchor" aria-label="anchor" href="#running-lmd-and-identifying-localized-gene-modules"></a>
 </h2>
 <p>Next, we run LMD and identify gene modules on the mutant sample.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">#### Prepare data</span></span>
 <span><span class="va">dat</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">data_S_MUT</span><span class="op">[[</span><span class="st">"RNA"</span><span class="op">]</span><span class="op">]</span><span class="op">@</span><span class="va">data</span><span class="op">)</span></span>
 <span><span class="co"># Keep genes express &gt; 10 cells and less than 50% of cells</span></span>
@@ -134,18 +135,18 @@ samples using UMAP, with cells color-coded by cell types.</p>
 <span><span class="va">dat</span> <span class="op">=</span> <span class="va">dat</span><span class="op">[</span><span class="va">selected_genes</span>,,drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
 <span><span class="co"># Extract top 14 PCs (# of PC based on Elbow Plot)</span></span>
 <span><span class="va">feature_space</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/pkg/SeuratObject/man/Embeddings.html" class="external-link">Embeddings</a></span><span class="op">(</span><span class="va">data_S_MUT</span><span class="op">[[</span><span class="st">"pca"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">[</span>,<span class="fl">1</span><span class="op">:</span><span class="fu"><a href="../reference/FindPC.html">FindPC</a></span><span class="op">(</span><span class="va">data_S_MUT</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">##### RunLMD</span></span>
 <span><span class="va">lmd_score_res</span> <span class="op">=</span> <span class="fu"><a href="../reference/LMD.html">LMD</a></span><span class="op">(</span><span class="va">dat</span>, <span class="va">feature_space</span>, max_time <span class="op">=</span> <span class="fl">2</span><span class="op">^</span><span class="fl">20</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Constructing KNN graph</span></span>
-<span><span class="co">#&gt; Remove 0 genes which express at less than 5 cells</span></span>
-<span><span class="co">#&gt; Calculate LMD score profile for large data</span></span>
-<span><span class="co">#&gt; Doubly Stochastic</span></span>
+<span><span class="co">#&gt; Remove 0 genes which express in less than 5 cells</span></span>
+<span><span class="co">#&gt; Calculate LMD score profile for large data...</span></span>
+<span><span class="co">#&gt; Run doubly stochastic on affinity matrix...</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; max diffusion time:2^ 10</span></span>
 <span></span>
 <span><span class="va">res</span> <span class="op">=</span> <span class="fu"><a href="../reference/show_result_lmd.html">show_result_lmd</a></span><span class="op">(</span><span class="va">lmd_score_res</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">##### Identify Gene Modules</span></span>
 <span><span class="kw">if</span><span class="op">(</span><span class="op">!</span><span class="st">"alra"</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">data_S_MUT</span><span class="op">@</span><span class="va">assays</span><span class="op">)</span><span class="op">)</span><span class="op">{</span></span>
 <span>  <span class="va">data_S_MUT</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/SeuratWrappers/man/RunALRA.html" class="external-link">RunALRA</a></span><span class="op">(</span><span class="va">data_S_MUT</span>, assay <span class="op">=</span> <span class="st">"RNA"</span><span class="op">)</span></span>
@@ -172,7 +173,7 @@ samples<a class="anchor" aria-label="anchor" href="#computing-module-activity-sc
 the mutant and wildtype samples.</p>
 <p><strong>Note</strong>: This step is CPU-intensive and may take 4 to 5
 minutes to complete.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">data_S_MUT</span> <span class="op">=</span> <span class="fu"><a href="../reference/AddModuleActivityScore.html">AddModuleActivityScore</a></span><span class="op">(</span><span class="va">data_S_MUT</span>, gene_partition <span class="op">=</span> <span class="va">gene_partition</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Start Loop</span></span>
 <span><span class="va">data_S_CTL</span> <span class="op">=</span> <span class="fu"><a href="../reference/AddModuleActivityScore.html">AddModuleActivityScore</a></span><span class="op">(</span><span class="va">data_S_CTL</span>, gene_partition <span class="op">=</span> <span class="va">gene_partition</span><span class="op">)</span></span>
@@ -185,7 +186,7 @@ mutant and WT<a class="anchor" aria-label="anchor" href="#modules-reflecting-fun
 </h3>
 <p>Here we show two modules that are localized in both mutant and
 wildtype.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/GuangchuangYu/ggplotify" class="external-link">ggplotify</a></span><span class="op">)</span></span>
 <span><span class="va">pl</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Module1"</span>,<span class="st">"Module16"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">module_name</span><span class="op">)</span><span class="op">{</span></span>
 <span>  <span class="va">pl</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"MUT"</span>,<span class="st">"CTL"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span><span class="op">{</span></span>
@@ -202,7 +203,7 @@ wildtype.</p>
 </h3>
 <p>Here we show two modules that are only localized in mutant and
 dispersed in wildtype.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/GuangchuangYu/ggplotify" class="external-link">ggplotify</a></span><span class="op">)</span></span>
 <span><span class="va">pl</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Module14"</span>,<span class="st">"Module17"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">module_name</span><span class="op">)</span><span class="op">{</span></span>
 <span>  <span class="va">pl</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"MUT"</span>,<span class="st">"CTL"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span><span class="op">{</span></span>

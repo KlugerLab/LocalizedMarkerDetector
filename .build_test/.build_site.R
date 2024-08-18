@@ -5,11 +5,11 @@ setwd("/banach1/ruiqi/local_marker/LocalizedMarkerDetector")
 
 # Create Template
 use_readme_rmd()
-usethis::use_mit_license("Ruiqi Li")
 # use_news_md()
 use_vignette("Example")
 
 # Build Package
+usethis::use_mit_license("Ruiqi Li")
 devtools::build_readme()
 Rcpp::compileAttributes()
 devtools::document()

@@ -184,7 +184,7 @@ ConstructGaussianGraph <- function(knn = 5, feature_space, alpha = 1, coef = 2, 
 #' @keywords internal
 #' @export
 ConstructDiffusionOperators <- function(W, max_time){
-  cat("Create a list of diffusion operator\n")
+  cat("Create a list of diffusion operators...\n")
   pb <- txtProgressBar(min = 0, max = 100, style = 3)
   P = Doubly_stochastic(W)
   setTxtProgressBar(pb, 10)
@@ -209,8 +209,9 @@ ConstructDiffusionOperators <- function(W, max_time){
   # Add t = 0
   P_ls = c(list(diag(nrow(W))),P_ls)
   # make it sparse
+  cat("\nConverting diffusion operators to sparse matrices...\n")
   P_ls = lapply(P_ls,function(x) as(x,"sparseMatrix"))
   names(P_ls) = c(0,2^seq(1,t-1))
-  cat("\nmax diffusion time:",2^(t-1))
+  cat("\nMax diffusion time:",2^(t-1),"\n")
   return(P_ls)
 }
