@@ -28,7 +28,7 @@ LMD can be installed in R as follows:
 
 ``` r
 install.packages("devtools")
-devtools::install_github("ruiqi0130/LocalizedMarkerDetector")
+devtools::install_github("KlugerLab/LocalizedMarkerDetector")
 
 library("LocalizedMarkerDetector")
 ```
@@ -36,11 +36,11 @@ library("LocalizedMarkerDetector")
 ## Example tutorial
 
 Please check [LMD
-tutorial](https://ruiqi0130.github.io/LocalizedMarkerDetector/articles/).
+tutorial](https://KlugerLab.github.io/LocalizedMarkerDetector/articles/).
 
 ## References
 
 References of LMD functions can be found
-[here](https://ruiqi0130.github.io/LocalizedMarkerDetector/reference/index.html).
+[here](https://KlugerLab.github.io/LocalizedMarkerDetector/reference/index.html).
 
 <!-- Data used in this tutorial can be downloaded from [Tabula Muris](https://figshare.com/ndownloader/files/13092380). -->

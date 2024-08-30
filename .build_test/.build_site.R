@@ -35,5 +35,5 @@ pkgdown::build_site()
 devtools::install() # install package
 
 # Install Package from github
-devtools::install_github("ruiqi0130/LocalizedMarkerDetector")
+devtools::install_github("KlugerLab/LocalizedMarkerDetector")
 
