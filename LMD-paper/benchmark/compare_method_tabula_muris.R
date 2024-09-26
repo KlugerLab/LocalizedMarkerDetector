@@ -38,6 +38,16 @@ tissue_name = names(tissue_download_link)[1]
 dir.path <- dir.path0
 folder.path <- file.path(dir.path,data_source)
 tiss <- readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
+
+# take subset of original dataset
+# tissue_name = paste0(tissue_name,"_granulocyte")
+if(tissue_name == "marrow_facs_granulocyte"){
+  tiss <- subset(tiss, cell_ontology_class == "granulocyte")
+  tiss <- tiss %>% NormalizeData() %>% FindVariableFeatures() %>%
+    ScaleData(verbose = FALSE) %>% RunPCA(npcs = 20, verbose = FALSE)
+  tiss = RunUMAP(tiss, dims = 1:20)
+}
+
 DefaultAssay(tiss) <- "RNA"
 n_dim = 20
 feature_space = Embeddings(tiss[["pca"]])[,1:n_dim]
@@ -79,9 +89,9 @@ for(method in method_ls){
   if(method == "semi"){
     RunSEMITONES(dat, feature_space, dir.file)
   }
-  # if(method == "marcopolo"){
-  #   RunMarcopolo(tiss, selected_genes, dir.file)
-  # }
+  if(method == "marcopolo"){
+    RunMarcopolo(tiss, selected_genes, dir.file)
+  }
   end.time <- Sys.time()
   time.taken <- end.time - start.time
   df_runtime[method,"Time"] = as.numeric(time.taken, units = "mins")
@@ -199,23 +209,25 @@ df_benchmark = read.table(file.path(folder.path.rank, paste0(tissue_name,"_bench
                           header = TRUE)
 rownames(df_benchmark) = df_benchmark$gene
 n_dim = 20
+low_qc = 1 # remove low-quality cells: cells express in less than N genes
+
+topn = c(seq(50,90,10),seq(100,900,100),seq(1000,3000,500),seq(4000,9000,1000),seq(10000,nrow(df_benchmark),2000))
+# topn = c(seq(20,90,10),seq(100,1000,100),seq(1000,3000,500),seq(4000,nrow(df_benchmark),1000))
 df_density_index =do.call(rbind,lapply(c(method_ls,"All genes"),function(method){
   if(method == "All genes"){
     top_gs = rownames(df_benchmark)
     topn = length(top_gs)
   }else{
     top_gs = rownames(df_benchmark)[order(df_benchmark[,method])]
-    topn = c(seq(50,90,10),seq(100,900,100),seq(1000,3000,500),seq(4000,9000,1000),seq(10000,nrow(df_benchmark),2000))
-    # topn = c(seq(50,90,10),seq(100,1000,100))
   }
   result = do.call(rbind, lapply(topn, function(top){
     features = top_gs[1:top]
-    # remove low-quality cells: cells express in less than 5 genes
+    # remove low-quality cells: cells express in less than N genes
     tmp_dat = subset(tiss,features = features)[["RNA"]]@counts
-    pass_QC_cell = names(which(colSums(tmp_dat > 0) >= 5))
+    pass_QC_cell = names(which(colSums(tmp_dat > 0) >= low_qc))
     subtiss = subset(tiss, cells = pass_QC_cell)
     subtiss <- subtiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = n_dim)
-    
+    # subtiss <- RunUMAP(subtiss, dims = 1:n_dim)
     # Low-quality_rate
     rate = 1 - length(pass_QC_cell) / ncol(tmp_dat)
     # Density-index
@@ -233,7 +245,6 @@ df_density_index =do.call(rbind,lapply(c(method_ls,"All genes"),function(method)
 write.table(df_density_index,file = file.path(folder.path.rank, paste0(tissue_name,"_DI.csv")),row.names = FALSE)
 
 # error bar & null distribution
-topn = c(seq(50,90,10),seq(100,900,100),seq(1000,3000,500),seq(4000,9000,1000),seq(10000,nrow(df_benchmark),2000))
 df_density_index_null = do.call(rbind,lapply(topn,function(top){
   set.seed(top)
   seed_ls = sample(1:1e5,size = 100)
@@ -243,9 +254,9 @@ df_density_index_null = do.call(rbind,lapply(topn,function(top){
   })
   result = unlist(lapply(random_top_gs, function(g_ls){
     features = g_ls
-    # remove low-quality cells: cells express in less than 5 genes
+    # remove low-quality cells: cells express in less than N genes
     tmp_dat = subset(tiss,features = features)[["RNA"]]@counts
-    pass_QC_cell = names(which(colSums(tmp_dat > 0) >= 5))
+    pass_QC_cell = names(which(colSums(tmp_dat > 0) >= low_qc))
     subtiss = subset(tiss, cells = pass_QC_cell)
     
     subtiss <- subtiss %>% ScaleData(features = features) %>% RunPCA(features = features, npcs = n_dim)

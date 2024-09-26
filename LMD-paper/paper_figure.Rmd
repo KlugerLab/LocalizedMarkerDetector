@@ -11,7 +11,7 @@ library("RColorBrewer")
 library("dplyr")
 library("patchwork")
 library("ggplot2")
-library("ggsignif")
+# library("ggsignif")
 library("LocalizedMarkerDetector")
 source("paper_figure_function.R", echo = F)
 source("paths.R")
@@ -174,22 +174,34 @@ ggsave(filename = file.path(figure_path,"fig-known_marker_comparison.png"), plot
 ## Table
 ```{r}
 library("reshape2")
-wide_data = df_auc; wide_data$AUROC = round(wide_data$AUROC,3)
+wide_data = df_auc; 
+# wide_data$AUROC = round(wide_data$AUROC,3)
 wide_data <- reshape2::dcast(wide_data, gt_set + Tissue + data_source ~ Method, value.var = "AUROC")
 colnames(wide_data)[1:3] = c("Criterion","Tissue","DataSource")
 wide_data[,1:3] = wide_data[,3:1]; colnames(wide_data)[1:3]=colnames(wide_data)[3:1]
 wide_data <- wide_data[order(wide_data$DataSource,wide_data$Tissue,wide_data$Criterion),]
 wide_data[,1:3] = apply(wide_data[,1:3],2,function(x) gsub("[\n]|Criterion1-|Criterion2-","",x))
 wide_data[,1:2] = apply(wide_data[,1:2],2,function(x) {x[duplicated(x)] = "";x})
-wide_data$Tissue[17] = "Motor Cortex(Mouse)"
-wide_data$Tissue[13] = "Motor Cortex(Human)"
+wide_data$Tissue[which(wide_data$Tissue == "Mouse-Motor Cortex")] = "Motor Cortex(Mouse)"
+wide_data$Tissue[which(wide_data$Tissue == "Human-Motor Cortex")] = "Motor Cortex(Human)"
 wide_data$Tissue = gsub("Human-|Mouse-","",wide_data$Tissue)
-# calculate average
-avg_tmp = wide_data %>%
-    group_by(Criterion) %>%
-    summarize(across(3:(ncol(wide_data)-1), ~ round(mean(.x, na.rm = TRUE), 3)))
-avg_tmp$DataSource = c("Average",""); avg_tmp$Tissue = "-"
-wide_data = rbind(wide_data,avg_tmp)
+
+# calculate median rank
+ranked_data <- data.frame(t(apply(wide_data[,4:ncol(wide_data)],1,function(x) rank(-x, na.last = "keep"))), check.names = FALSE)
+ranked_data$Criterion = wide_data$Criterion
+median_rank = ranked_data %>% group_by(Criterion) %>% summarize(across(1:(ncol(ranked_data)-1), ~ median(.x, na.rm = TRUE)))
+median_rank$DataSource = c("Median Rank",""); median_rank$Tissue = "-"
+wide_data = rbind(wide_data,median_rank)
+
+# # calculate average
+# avg_tmp = wide_data %>%
+#     group_by(Criterion) %>%
+#     summarize(across(3:(ncol(wide_data)-1), ~ mean(.x, na.rm = TRUE)))
+# avg_tmp$DataSource = c("Average",""); avg_tmp$Tissue = "-"
+# wide_data = rbind(wide_data,avg_tmp)
+
+wide_data[,4:ncol(wide_data)] = round(wide_data[,4:ncol(wide_data)],3)
+
 bold_max <- function(vec) {
   max_val <- max(vec, na.rm = TRUE)
   vec = unlist(ifelse(vec == max_val, paste0("\\textbf{", vec, "}"), vec))
@@ -198,8 +210,65 @@ bold_max <- function(vec) {
 wide_data[,4:ncol(wide_data)] = t(apply(wide_data[,4:ncol(wide_data)],1,bold_max))
 wide_data[is.na(wide_data)] = "-"
 
-write.csv(wide_data, file = file.path(folder.path,"AUROC_table.csv"), row.names = FALSE)
+# write.csv(wide_data, file = file.path(folder.path,"AUROC_table.csv"), row.names = FALSE)
 ```
+## Colored Table figure
+```{r}
+library(tidyr)
+
+# separate wide_data into two by true_set
+df_head = wide_data %>% filter(Criterion == " CellMarkerDB") %>% select(c("DataSource","Tissue"))
+df_head[nrow(df_head),"DataSource"] = ""
+df_head[nrow(df_head),"Tissue"] = "Median Rank"
+df_head$DataSource = c(
+  rep(df_head$DataSource[1],3),
+  rep(df_head$DataSource[4],6),
+  df_head$DataSource[10])
+
+pl = lapply(1:2,function(i){
+trueset = unique(wide_data$Criterion)[i]
+wide_data_sub = wide_data %>% filter(Criterion == trueset) %>% select(all_of(unname(method_fullname))) %>% mutate(across(everything(), ~ as.numeric(gsub("\\\\textbf\\{(.*)\\}", "\\1", .)))) %>% mutate(df_head)
+
+ranked_data_sub = ranked_data %>% filter(Criterion == trueset) %>% select(all_of(unname(method_fullname))) %>% mutate(df_head[1:(nrow(df_head)-1),])
+ranked_data_sub = rbind(ranked_data_sub,wide_data_sub[nrow(wide_data_sub),])
+
+# Melt the data into long format for ggplot2
+df_long <- wide_data_sub %>%
+  pivot_longer(cols = all_of(unname(method_fullname)), names_to = "Method", values_to = "AUROC") %>%
+  left_join(ranked_data_sub %>%
+              pivot_longer(cols = all_of(unname(method_fullname)), names_to = "Method", values_to = "Rank"),
+            by = c("DataSource","Tissue","Method"))
+
+df_long$Method = factor(df_long$Method, levels = rev(colnames(wide_data)[4:10]))
+df_long$DataSource = factor(df_long$DataSource, levels = unique(df_long$DataSource))
+
+# Plot the heatmap
+p = ggplot(df_long, aes(x = Tissue, y = Method, fill = Rank)) +
+    geom_tile(color = "white") + 
+    scale_fill_distiller(palette = "YlOrBr", direction = -1, na.value = "white") +
+    # scale_fill_gradient(low = "brown", high = "white", na.value = "white") +
+    geom_text(aes(label = AUROC), size = 3) + 
+    theme_minimal() + facet_grid(~ DataSource, scales = "free",space = "free", switch = "x") + ggtitle(paste0("True markerset ",i)) + 
+    theme(plot.title = element_text(size = 15,face = "bold"),
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          strip.placement = 'outside',
+          axis.title.x = element_blank(), 
+          axis.title.y = element_blank(),
+          panel.grid = element_blank(), 
+          strip.text = element_text(size = 10,face = "bold"),
+          axis.text.y = element_text(face = "bold", size = 10))
+
+if(i==2){p = p + theme(axis.text.y = element_blank())}
+
+p
+})
+
+p = wrap_plots(pl, nrow = 1) + plot_layout(guides = "collect")
+
+ggsave(filename = file.path(figure_path,"fig-known_marker_comparison.png"), plot = p, width = 12, height = 6)
+```
+
+
 # SupFig-RunTime
 ```{r}
 df_runtime = do.call(rbind,
@@ -273,7 +342,7 @@ df_label_all = df_benchmark[unique(sub),c(method_vs,method_vs_set)]
 # df_label_all$'legend' = sapply(seq(nrow(df_label_all)),function(i){
 #   paste(paste(method_fullname[colnames(df_label_all)],df_label_all[i,],sep = ":"),collapse = "\n")
 # })
-g = c("Cd19","Naaa","Mogat2","Grina","Abca13","Zf12","Il2rb","Phgdh","Vpreb2","Fyb")
+g = c("Cd19","Naaa","Mogat2","Grina","Abca13","Zf12","Il2rb","Phgdh","Vpreb2","Fyb") # <100&>500
 names(g) = rep(method_vs_set,each = 2)
 pl = lapply(1:length(g),function(i){
   x = g[i]
@@ -446,7 +515,7 @@ coldef = setNames(
   colorRampPalette(brewer.pal(8, "Set1"))(length(method_fullname)),
   method_fullname)
 ```
-
+## Curve Plot & Coverage rate
 ```{r}
 data_source = "tabular_muris"
 dir.path <- dir.path0
@@ -510,6 +579,41 @@ ggsave(filename = file.path(figure_path,"supfig-densityindex.png"), plot = fig, 
 fig = wrap_plots(pl[[1]],ncol = 1) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "A") & theme(legend.position = 'bottom', plot.tag = element_text(size = 20))
 ggsave(filename = file.path(figure_path,"supfig-densityindex.png"), plot = fig, width = 12, height = 5)
 ```
+## Colored Table
+```{r}
+data_source = "tabular_muris"
+dir.path <- dir.path0
+# tissue_name = "marrow_facs" # marrow_facs_granulocyte
+
+pl = lapply(c("marrow_facs","marrow_facs_granulocyte"),function(tissue_name){
+score_measure = read.table(file.path(dir.path,"benchmark",data_source,paste0(tissue_name,"_DI.csv")),header = TRUE)
+score_measure$Method = ifelse(score_measure$Method %in% names(method_fullname),method_fullname[score_measure$Method],score_measure$Method)
+total_gene = score_measure %>% filter(Method == "All genes") %>%.$TopGene
+score_measure = score_measure %>%
+  filter(Method == "All genes") %>% 
+  slice(rep(1:n(), each = length(method_fullname))) %>% 
+  mutate(Method = method_fullname) %>%
+  bind_rows(score_measure) %>% filter(Method != "All genes") %>% filter(TopGene %in% c(100,300,500,1000,3000,5000,10000,total_gene)) %>% mutate(TopGene = as.factor(TopGene)) %>% mutate(Method = factor(Method,levels = rev(method_fullname)))
+
+levels(score_measure$TopGene)[nlevels(score_measure$TopGene)] = sprintf("All(%d)",total_gene)
+
+fig = ggplot(score_measure, aes(x = TopGene, y = Method, fill = DensityIndex)) + 
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white",high = "red") +
+  geom_text(aes(label = round(DensityIndex,3)), size = 3) + theme_minimal() + xlab("# of Top Genes") + ylab("Method") + 
+  ggtitle(ifelse(tissue_name == "marrow_facs", "Bone Marrow","Bone Marrow (granulocyte)")) + 
+  theme(plot.title = element_text(size = 20, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 10),
+          panel.grid = element_blank(),
+        axis.ticks = element_line())
+fig
+})
+
+fig = wrap_plots(pl,ncol = 1) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(size = 20))
+ggsave(filename = file.path(figure_path,"supfig-densityindex.png"), plot = fig, width = 10, height = 10)
+```
+
 
 # SupFig - Sensitivity Test
 ## kNN
@@ -1335,6 +1439,24 @@ p2 = (wrap_plots(pl, nrow = 1) & theme_minimal() &
 p = (as.ggplot(p1)/as.ggplot(p2)) + plot_annotation(tag_levels = 'A') & theme(plot.tag = element_text(face="bold", size = 25))
 
 ggsave(filename = file.path(figure_path,"supfig-smom2_colocalized.png"), plot = p, width = 20, height = 11)
+```
+
+# SupFig - sample-specificity for each module
+```{r}
+df = read.csv(file.path(dir.path,"intermediate_data","cell_prop_in_module_table.csv"))
+df$gene_props = df$gene_props * 100
+df = df %>% filter(module=="Module12" | sample!="E14.5_WT") %>% filter(gene_props > 5 & gene_props < 50)
+p = ggplot(df,
+       aes(x=gene_props, y=cell_props, linetype = sample,color = sample)) +
+  geom_line() + facet_wrap(~module,scales = "free") +
+  labs(x = "% of genes", y = "Proportion of cells", title = "Expression of Module 12 genes in DC samples") + 
+  theme(legend.position="right",
+          plot.title = element_text(size = 10),
+          axis.title = element_text(size = 10),
+          axis.text = element_text(size = 5),
+          legend.title = element_text(size = 5),
+          legend.text = element_text(size = 5))
+ggsave(filename = file.path(figure_path,"supfig-smom2_sample_specificity.png"), plot = p, width = 4, height = 3)
 ```
 
 # SupsupFig - Boxplot of ModuleActivityScore of active cells
