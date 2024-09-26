@@ -347,6 +347,40 @@ data_S <- DietSeurat(
 )
 saveRDS(data_S, file = file.path(dir.path,"process_data","data_S_smom2_dermal_E13.5.rds"))
 
+
+# Sample-specificity check --------
+sample_name = sample_ls[1]
+local_gene = get(paste0("local_gene_",sample_name))
+modules = module_ls[[sample_name]]
+modules = modules[grepl("Quiescent|DC|High",names(modules))]
+df = do.call(rbind,lapply(1:length(modules),function(i){
+  m = modules[i]
+  genes = names(local_gene$gene_partition)[local_gene$gene_partition == sub(".*_([0-9]+)$", "\\1", m)]
+  df = do.call(rbind,lapply(sample_ls,function(sample_name){
+    data_S = get(paste0("data_S_",sample_name))
+    expr = as.matrix(FetchData(data_S, vars = c(genes)))
+    ngenes = rowSums(expr > 0)
+    gene_props = unique(floor(length(genes) * seq(0,1,0.001)))
+    names(gene_props) = gene_props/length(genes)
+    cell_props = unlist(lapply(gene_props,function(x) sum(ngenes > x)/length(ngenes)))
+    df = data.frame(cell_props)
+    df$'gene_props' = as.numeric(rownames(df))
+    df$'sample' = gsub("smom2_dermal_","",sample_name)
+    df$'sample' = gsub("CTL","WT",df$'sample')
+    df$'sample' = gsub("MUT","SmoM2",df$'sample')
+    df
+  }))
+  df$'module' = paste0("Module",sub(".*_([0-9]+)$", "\\1", m))
+  df
+}))
+write.csv(df, file.path(folder.path,"cell_prop_in_module_table.csv"))
+# df = df %>% filter(module=="Module12" | sample!="E14.5_WT") %>% filter(gene_props > 0.1)
+# ggplot(df,
+#        aes(x=gene_props, y=cell_props, group = sample, color = sample)) +
+#   geom_line() + xlim(0.1,0.5) + facet_wrap(~module,scales = "free") + 
+#   labs(x = "Proportion of genes from the given module", y = "Proportion of cells", 
+#        color = "Sample", title = "Proportion of cells expressing genes in the given module") 
+
 # Wnt level -------
 sample_name = sample_ls[1]
 modules = module_ls[[sample_name]]
@@ -377,7 +411,7 @@ df$status = ifelse(data_S@meta.data[,modules] > thred,paste0(modules,"+"),paste0
 df$status = ifelse(df$Cdkn1a > median(df$Cdkn1a),paste0(df$status,"Cdkn1a+"),paste0(df$status,"Cdkn1a-"))
 write.csv(df,file = file.path(folder.path,"e13_smom2_cdkn1a_table.csv"))
 
-# Proportion of CC-phase in each module
+# # Proportion of CC-phase in each module
 # proportions_df <- df %>%
 #   group_by(wnt_related_module) %>%
 #   summarise(
