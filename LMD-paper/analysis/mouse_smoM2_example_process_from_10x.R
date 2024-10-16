@@ -1,7 +1,4 @@
 ###### Preprocess all samples
-# by Rihao Qu
-# original file: /data/rq25/peggy_10x_mouse_smom2_202112/seurat_analysis/seurat.R
-# original raw data file: /data/rq25/peggy_10x_mouse_smom2_202112/
 
 #####
 ##### Load required packages & functions for analysis
