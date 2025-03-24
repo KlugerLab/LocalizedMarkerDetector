@@ -152,10 +152,10 @@ sinkhorn_knopp_largedata = function(A, niter = 100, tol = 1e-8, verb = FALSE) {
   # code refer to (https://rdrr.io/github/aaamini/nett/src/R/sinkhorn.R)
   delta = Inf
   for (irep in 1:niter) {
-    scale_fac <- 1 / sqrt(rowSums(A))
+    scale_fac <- 1 / sqrt(Matrix::rowSums(A))
     A <- Matrix::.sparseDiagonal(x = scale_fac) %*% A %*% Matrix::.sparseDiagonal(x = scale_fac)
     
-    delta = pmax(max(abs(1 - rowSums(A))), max(abs(1 - colSums(A))))
+    delta = pmax(max(abs(1 - Matrix::rowSums(A))), max(abs(1 - Matrix::colSums(A))))
     if (verb) nett::printf("err = %3.5e\n", delta)
     if (delta < tol){
       cat("large_graph, doubly-stochastic iter step: ",irep,"\n")

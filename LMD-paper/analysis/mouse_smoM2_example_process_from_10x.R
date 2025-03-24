@@ -122,7 +122,7 @@ data_S <- data_S %>% NormalizeData() %>%
 data_S <- RunPCA(data_S, npcs = 30, verbose = F)
 # plot(data_S@reductions$pca@stdev)
 data_S <- RunUMAP(data_S, dims = 1:30)
-DimPlot(data_S, reduction = "umap", group.by = "orig.ident", shuffle = TRUE)
+DimPlot(data_S, reduction = "umap", group.by = c("orig.ident","Phase"), shuffle = TRUE)
 
 #####
 ##### Clustering
@@ -137,7 +137,7 @@ DimPlot(data_S, reduction = "umap", label = T, group.by = "cluster", split.by = 
 #####
 ##### Extract Dermal Cells
 #####
-FeaturePlot(data_S,label = TRUE,features = c("Dkk1","Dkk2","Lef1","Ptch1","Sox2","Sox18"),order = T,ncol = 3) & NoAxes()
+FeaturePlot(data_S,label = TRUE,features = c("Dkk1","Dkk2","Lef1","Ptch1","Sox2","Sox18", "Col1a1", "Col1a2", "Pdgfra"),order = T,ncol = 3) & NoAxes()
 data_S_dermal <- subset(data_S, cluster %in% c(0:3, 6:7))
 data_S_dermal <- data_S_dermal %>% NormalizeData() %>% 
   FindVariableFeatures() %>% ScaleData() %>%
@@ -145,8 +145,7 @@ data_S_dermal <- data_S_dermal %>% NormalizeData() %>%
   RunUMAP(dims = 1:30) %>% FindNeighbors(dims = 1:30) %>% 
   FindClusters(resolution = 0.3)
 data_S_dermal$cluster <- data_S_dermal$RNA_snn_res.0.3 #integrated
-DimPlot(data_S_dermal, reduction = "umap", label = T, group.by = "cluster")
-DimPlot(data_S_dermal, reduction = "umap", label = T, group.by = "orig.ident")
+DimPlot(data_S_dermal, reduction = "umap", label = T, group.by = c("cluster","orig.ident"))
 
 #####
 ##### Separate into different conditions & Save Results

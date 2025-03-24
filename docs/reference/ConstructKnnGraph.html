@@ -63,7 +63,7 @@
     </div>
 
     <div id="ref-usage">
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">ConstructKnnGraph</span><span class="op">(</span>knn <span class="op">=</span> <span class="fl">5</span>, <span class="va">feature_space</span>, adjust_by_MST <span class="op">=</span> <span class="cn">TRUE</span>, self_loop <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">ConstructKnnGraph</span><span class="op">(</span>knn <span class="op">=</span> <span class="fl">5</span>, <span class="va">feature_space</span>, adjust_disconnection <span class="op">=</span> <span class="cn">TRUE</span>, self_loop <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div id="arguments">
@@ -78,7 +78,7 @@
 <dd><p>matrix; a cell-by-coordinate matrix (e.g., 20 principal components).</p></dd>
 
 
-<dt id="arg-adjust-by-mst">adjust_by_MST<a class="anchor" aria-label="anchor" href="#arg-adjust-by-mst"></a></dt>
+<dt id="arg-adjust-by-mst">adjust_disconnection<a class="anchor" aria-label="anchor" href="#arg-adjust-by-mst"></a></dt>
 <dd><p>boolean; TRUE for connecting disconnected components using Minimum Spanning Trees (MST). Default is TRUE.</p></dd>
 
 

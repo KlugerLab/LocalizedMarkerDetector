@@ -29,7 +29,7 @@ dir_copy("articles", "docs/articles", overwrite = TRUE)
 # file.copy("articles/LMD_cross_comparison_demo.html", "docs/articles/LMD_cross_comparison_demo.html", overwrite = TRUE)
 
 pkgdown::build_site()
-
+devtools::check(vignettes = FALSE)
 
 # Install Package from local
 devtools::install() # install package

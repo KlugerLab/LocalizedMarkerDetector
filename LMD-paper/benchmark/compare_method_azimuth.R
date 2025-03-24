@@ -3,6 +3,7 @@ bioc_packages <- c("Seurat")
 sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
 sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
 lapply(c(cran_packages,bioc_packages), require, character.only = TRUE)
+source(file.path(dirname(rstudioapi::getActiveDocumentContext()$path),"run_methods_function.R"))
 
 # Download/Load Data ===========
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
@@ -11,7 +12,7 @@ source("../paths.R")
 dir.path <- dir.path0
 data_source = "azimuth"
 folder.path <- file.path(dir.path,data_source)
-dir.create(folder.path, recursive=T)
+if(!dir.exists(folder.path)){dir.create(folder.path, recursive=T)}
 tissue_download_link = c(
   "human_kidney" = "https://seurat.nygenome.org/azimuth/demo_datasets/kidney_demo_stewart.rds",
   "human_bone_marrow" = "https://seurat.nygenome.org/azimuth/demo_datasets/bmcite_demo.rds",
@@ -19,49 +20,77 @@ tissue_download_link = c(
   "mouse_motor_cortex" = "https://seurat.nygenome.org/azimuth/demo_datasets/allen_mop_2020.rds",
   "human_lung_hlca" = "https://seurat.nygenome.org/hlca_ref_files/ts_opt.rds",
   "human_motor_cortex" = "https://seurat.nygenome.org/azimuth/demo_datasets/allen_m1c_2019_ssv4.rds"
+  # "human_pbmc" = "https://www.dropbox.com/scl/fi/1fbur4p7law980iptl5zy/pbmc_10k_v3_filtered_feature_bc_matrix.h5?rlkey=3if8o9hxxisk62u7b2bqmcsr5&e=3&st=2go4s4gz&dl=1"
 )
 for(tissue_name in names(tissue_download_link)){
   file_name = paste0(tissue_name,".rds")
   if (!file.exists(file.path(folder.path,file_name))) {
-    options(timeout=6000)
-    download.file(tissue_download_link[tissue_name],
-                  destfile = file.path(folder.path,file_name), method = 'libcurl')
-    # update version
-    tiss <- readRDS(file.path(folder.path,file_name))
-    tiss <- UpdateSeuratObject(tiss)
-    saveRDS(tiss,file = file.path(folder.path,file_name))
+    if(grepl(".rds",tissue_download_link[tissue_name])){
+      options(timeout=6000)
+      download.file(tissue_download_link[tissue_name],
+                    destfile = file.path(folder.path,file_name), method = 'libcurl')
+      # update version
+      tiss <- readRDS(file.path(folder.path,file_name))
+      tiss <- UpdateSeuratObject(tiss)
+      saveRDS(tiss,file = file.path(folder.path,file_name))
+    }else if(grepl(".h5",tissue_download_link[tissue_name])){
+      download.file(tissue_download_link[tissue_name],
+                    destfile = file.path(folder.path,paste0(tissue_name,".h5")), method = 'libcurl')
+      tiss <- Read10X_h5(file.path(folder.path,paste0(tissue_name,".h5")))
+      tiss <- CreateSeuratObject(counts = tiss)
+      saveRDS(tiss,file = file.path(folder.path,file_name))
+    }
   }
 }
 
-# Prepare input data ===========
+# Preprocess data ===========
 data_source = "azimuth"
-tissue_name = names(tissue_download_link)[1]
+lapply(names(tissue_download_link), function(tissue_name){
+  dir.path <- dir.path0
+  folder.path <- file.path(dir.path,data_source)
+  tiss <- readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
+  DefaultAssay(tiss) <- "RNA"
+  # Annotate based on Azimuth (download result from shiny)
+  predictions <- read.delim(file.path(folder.path,"azimuth_annotate_result",paste0(tissue_name,"_azimuth_pred.tsv")), row.names = 1)
+  tiss <- AddMetaData(
+    object = tiss,
+    metadata = predictions)
+  projected.umap <- readRDS(file.path(folder.path,"azimuth_annotate_result",paste0(tissue_name,"_azimuth_umap.Rds")))
+  tiss <- tiss[, Cells(projected.umap)]
+  tiss[['umap']] <- projected.umap
+  
+  # Only keep cells which the predicted ct > 10
+  annotation_group_tmp = colnames(predictions)[1]
+  meta.data = tiss@meta.data[,annotation_group_tmp]
+  tiss$'annotation_group' = meta.data
+  tiss <- subset(tiss, cells = colnames(tiss)[meta.data %in% 
+                                                names(table(meta.data)[table(meta.data) > 10])])
+  # Filter-out genes detected in less than 5 cells
+  tiss <- subset(tiss, features = names(which(rowSums(tiss[["RNA"]]@counts > 0) >= 5)))
+  # Generate PC embeddings
+  DefaultAssay(tiss) = "RNA"
+  tiss = tiss %>% NormalizeData() %>% FindVariableFeatures() %>%
+    ScaleData(verbose = FALSE) %>% RunPCA(npcs = 50, verbose = FALSE)
+  saveRDS(tiss,file = file.path(folder.path,paste0(tissue_name,".rds")))
+})
 
-for(tissue_name in names(tissue_download_link)){
-dir.path <- dir.path0
-folder.path <- file.path(dir.path,data_source)
-tiss <- readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
-DefaultAssay(tiss) <- "RNA"
-# Annotate based on Azimuth (download result from shiny)
-predictions <- read.delim(file.path(folder.path,"azimuth_annotate_result",paste0(tissue_name,"_azimuth_pred.tsv")), row.names = 1)
-tiss <- AddMetaData(
-  object = tiss,
-  metadata = predictions)
-# projected.umap <- readRDS(file.path(folder.path,"azimuth_annotate_result",paste0(tissue_name,"_azimuth_umap.Rds")))
-# tiss <- tiss[, Cells(projected.umap)]
-# tiss[['umap.proj']] <- projected.umap
+# Load Data ===========
+tissue_ls = names(tissue_download_link)
+data_S_ls = lapply(tissue_ls, function(tissue_name){
+  dir.path <- dir.path0
+  folder.path <- file.path(dir.path,data_source)
+  tiss <- readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
+  tiss
+})
+names(data_S_ls) = tissue_ls
 
-# Only keep cells which the predicted ct > 10
-annotation_group = colnames(predictions)[1]
-meta.data = tiss@meta.data[,annotation_group]
-tiss <- subset(tiss, cells = colnames(tiss)[meta.data %in% names(table(meta.data)[table(meta.data) > 10])])
-# Filter-out genes detected in less than 5 cells
-tiss <- subset(tiss, features = names(which(rowSums(tiss[["RNA"]]@counts > 0) >= 5)))
-# Generate PC embeddings
-DefaultAssay(tiss) = "RNA"
-tiss = tiss %>% NormalizeData() %>% FindVariableFeatures() %>%
-  ScaleData(verbose = FALSE) %>% RunPCA(npcs = 50, verbose = FALSE)
-# Prepare Input
+# Run ===========
+method_ls = c("lmd","hvg", "wilcox_no_filter",
+              "haystack","hotspot",
+              "cosg","scmarker", "semi")
+lapply(tissue_ls, function(tissue_name){
+tiss = data_S_ls[[tissue_name]]
+# Prepare Input -------
 n_dim = 20
 feature_space = as.matrix(tiss@reductions$pca@cell.embeddings[,1:n_dim])
 dat = as.matrix(tiss[[DefaultAssay(tiss)]]@data)
@@ -70,26 +99,30 @@ selected_genes = (Gene_detected_count >= 10) & (Gene_detected_count <= ncol(dat)
 selected_genes = names(selected_genes)[selected_genes]
 dat = dat[selected_genes,,drop = FALSE]
 
-# # Save for Marcopolo
-# sc <- import("scanpy", convert = FALSE)
-# scvi <- import("scvi", convert = FALSE)
-# tiss_adata <- sc$AnnData(
-#   X = t(raw_count)
-# )
-# anndata::write_h5ad(tiss_adata, file.path(folder_path,gsub(".rds",".h5ad",file_name)))
-
 # Run Each Method and save results ========
-source(file.path(dirname(rstudioapi::getActiveDocumentContext()$path),"run_methods_function.R"))
 folder.path = file.path(dir.path0,"benchmark",data_source)
-dir.create(folder.path, recursive = T)
-method_ls = c("lmd","hvg", "wilcox_no_filter",
-              "haystack","hotspot","semi")
-df_runtime = data.frame("nGenes" = nrow(dat),
-                        "nCells" = ncol(dat),
-                        "Method" = method_ls,row.names = method_ls)
+if(!file.exists(folder.path)){
+  dir.create(folder.path, recursive = T)
+}
+
+# Create RunTime Table
+if(!file.exists(file.path(folder.path, paste0(tissue_name,"_runtime.csv")))){
+  df_runtime = data.frame("nGenes" = nrow(dat),
+                          "nCells" = ncol(dat),
+                          "Method" = method_ls,
+                          'ncluster' = length(unique(tiss$annotation_group)),
+                          row.names = method_ls)
+}else{
+  df_runtime = read.table(file.path(folder.path, paste0(tissue_name,"_runtime.csv")))
+}
+file.create(file.path(folder.path, "runtime_tmp.txt"))
 for(method in method_ls){
   dir.file = file.path(folder.path, paste0(method,"_",tissue_name,".csv"))
+  if(file.exists(dir.file)){
+    next;
+  }
   start.time <- Sys.time()
+  cat("Start Run ",method,"\n")
   if(method == "lmd"){
     RunLMD(dat, feature_space, dir.file)
   }
@@ -97,7 +130,13 @@ for(method in method_ls){
     RunHVG(tiss, selected_genes, dir.file)
   }
   if(method == "wilcox_no_filter"){
-    RunSeuratv4(tiss, selected_genes, feature_space, dir.file)
+    RunSeuratv4(tiss, selected_genes, feature_space, dir.file, res = 5)
+  }
+  if(method == "cosg"){
+    RunCOSG(tiss, selected_genes, feature_space, dir.file, res = 5)
+  }
+  if(method == "scmarker"){
+    RunSCMarker(dat, feature_space, dir.file)
   }
   if(method == "haystack"){
     RunHaystack(dat, feature_space, dir.file)
@@ -113,8 +152,19 @@ for(method in method_ls){
   # }
   end.time <- Sys.time()
   time.taken <- end.time - start.time
-  df_runtime[method,"Time"] = as.numeric(time.taken, units = "mins")
+  cat(paste0(method," ",as.numeric(time.taken, units = "mins")
+             ,"mins,\n"), file = file.path(folder.path, "runtime_tmp.txt"), append = TRUE)
+  
+  if(method %in% rownames(df_runtime)){
+    df_runtime[method,"Time"] = as.numeric(time.taken, units = "mins")
+  }else{
+    tmp = df_runtime[1,]
+    rownames(tmp) = tmp$Method = method
+    tmp$'Time' = as.numeric(time.taken, units = "mins")
+    df_runtime = rbind(df_runtime,tmp)
+  }
 }
+file.remove(file.path(folder.path, "runtime_tmp.txt"))
 write.table(df_runtime,file = file.path(folder.path, paste0(tissue_name,"_runtime.csv")))
 
 # Prepare ground_truth Marker ===========
@@ -126,10 +176,12 @@ write.table(df_runtime,file = file.path(folder.path, paste0(tissue_name,"_runtim
 #' 
 dir.path <- dir.path0
 folder.path <- file.path(dir.path,data_source,"ground_truth_geneset")
-dir.create(folder.path, recursive=T)
+if(!file.exists(folder.path)){
+  dir.create(folder.path, recursive=T)
+}
 file_name = paste0(tissue_name,"_ground_truth_c1.txt")
 if(!file.exists(file.path(folder.path,file_name))){
-  avg_exp = AverageExpression(subset(tiss,features = selected_genes), assays = "RNA", slot = "counts", group.by = annotation_group) %>% as.data.frame()
+  avg_exp = AverageExpression(subset(tiss,features = selected_genes), assays = "RNA", slot = "counts", group.by = "annotation_group") %>% as.data.frame()
   avg_exp_ordered <- avg_exp %>%
     rowwise() %>%
     mutate(cell_order_val = list(sort(c_across(everything()), decreasing = FALSE))) %>%
@@ -155,13 +207,14 @@ if(!file.exists(file.path(folder.path,file_name))){
   cell_marker_db_ls <- lapply(sheet_name, function(X) readxl::read_excel(file.path(folder.path, "Azimuth_Cell_marker.xlsx"), sheet = X))
   cell_marker_db_ls <- lapply(cell_marker_db_ls, as.data.frame)
   names(cell_marker_db_ls) <- sheet_name
-  sheet = sheet_name[grep(tissue_name,sheet_name)]
-  ct_retrieve = lapply(unique(tiss@meta.data[,annotation_group]),
+  tissue_prefix = ifelse(grepl("human_pbmc",tissue_name),"human_pbmc",tissue_name)
+  sheet = sheet_name[grep(tissue_prefix,sheet_name)]
+  ct_retrieve = lapply(unique(tiss@meta.data[,"annotation_group"]),
                        function(ct) {
                          x = cell_marker_db_ls[[sheet]][,"Label"]
                          x[grep(paste0("^", ct, "$"),x,ignore.case = TRUE)]
                        } )
-  names(ct_retrieve) = unique(tiss@meta.data[,annotation_group])
+  names(ct_retrieve) = unique(tiss@meta.data[,"annotation_group"])
   cell_marker_db = cell_marker_db_ls[[sheet]] %>% filter(Label %in% unlist(ct_retrieve))
   celldb_marker = unlist(lapply(cell_marker_db$Markers, function(x) strsplit(x,split = ",")))
   celldb_marker = trimws(celldb_marker)
@@ -198,4 +251,70 @@ auc_df = do.call(rbind,lapply(method_ls,function(method){
 }))
 write.table(auc_df,file = file.path(folder.path.rank, paste0(tissue_name,"_auroc.csv")),row.names = FALSE)
 
-}
+})
+
+## Cluster-based methods' adaptive resolution -------
+method_subls = c("wilcox_no_filter","cosg")
+lapply(names(tissue_download_link), function(tissue_name){
+tiss = data_S_ls[[tissue_name]]
+n_dim = 20
+feature_space = as.matrix(tiss@reductions$pca@cell.embeddings[,1:n_dim])
+dat = as.matrix(tiss[[DefaultAssay(tiss)]]@data)
+Gene_detected_count <- apply(dat > apply(dat,2,median),1,sum)
+selected_genes = (Gene_detected_count >= 10) & (Gene_detected_count <= ncol(dat) * 0.5)
+selected_genes = names(selected_genes)[selected_genes]
+dat = dat[selected_genes,,drop = FALSE]
+
+lapply(method_subls,function(method){
+  folder.path = file.path(dir.path0,"benchmark",data_source,method)
+  if(!file.exists(folder.path)){dir.create(folder.path)}
+  if(!file.exists(file.path(folder.path, paste0(tissue_name,"_auroc.csv")))){
+    res_grid = c(seq(0.5,3,0.5),seq(4,10,1))
+    if(!file.exists(file.path(dir.path0,"benchmark",data_source,paste0(tissue_name,"_louvain_clusters.csv")))){
+      df_res = unlist(lapply(res_grid,function(res){
+        tiss_tmp = tiss
+        tiss_tmp[["pca"]]@cell.embeddings = feature_space
+        tiss_tmp <- tiss_tmp %>% FindNeighbors(dims = 1:n_dim, reduction = "pca") %>% 
+          FindClusters(resolution = res, algorithm = 3)
+        nlevels(Idents(tiss_tmp))
+      }))
+      df_res = data.frame(res = res_grid,
+                          ncluster = df_res,
+                          ncelltype = length(unique(tiss$'annotation_group')))
+      write.table(df_res,file = file.path(dir.path0,"benchmark",data_source,paste0(tissue_name,"_louvain_clusters.csv")),row.names = FALSE)
+      
+    }
+    df_res = read.table(file = file.path(dir.path0,"benchmark",data_source,paste0(tissue_name,"_louvain_clusters.csv")),header = T)
+    res_grid = df_res$res[df_res$ncluster - df_res$ncelltype < 100]
+    
+    df_benchmark = lapply(res_grid, function(res){
+      if(method == "wilcox_no_filter"){
+        marker = RunSeuratv4(tiss, selected_genes, feature_space, res = res)
+      }else if(method == "cosg"){
+        marker = RunCOSG(tiss, selected_genes, feature_space, res = res)
+      }
+      if(!is.null(marker)){
+        marker %>% select(gene,rank) %>% distinct()
+      }else{
+        marker
+      }
+    })
+    names(df_benchmark) = res_grid
+    df_benchmark = bind_rows(df_benchmark, .id = "res")
+    df_benchmark <- tidyr::pivot_wider(df_benchmark, names_from = res, values_from = rank) %>% as.data.frame()
+    df_benchmark[is.na(df_benchmark)] = nrow(df_benchmark)
+    write.table(df_benchmark,file = file.path(folder.path, paste0(tissue_name,"_benchmark_rank_table.csv")),row.names = FALSE)
+    # AUROC
+    # df_benchmark = read.table(file.path(folder.path, paste0(tissue_name,"_benchmark_rank_table.csv")),
+    #                           header = TRUE)
+    folder.path.gt <- file.path(dir.path,data_source,"ground_truth_geneset")
+    auc_df = do.call(rbind,lapply(colnames(df_benchmark)[-1],function(res){
+      vec = quick_marker_benchmark(setNames(df_benchmark[,res],df_benchmark$gene),
+                                   folder_path = folder.path.gt, 
+                                   tissue_name = tissue_name)
+      data.frame(gt_set = names(vec),AUROC = vec, res = res)
+    }))
+    write.table(auc_df,file = file.path(folder.path, paste0(tissue_name,"_auroc.csv")),row.names = FALSE)
+  }
+})
+})

@@ -4,11 +4,12 @@
 # Install singleCellHaystack: install.packages("singleCellHaystack")
 
 cran_packages <- c("reticulate","singleCellHaystack")
-github_packages <- c("immunogenomics/presto")
+github_packages <- c("immunogenomics/presto","KChen-lab/SCMarker")
 sapply(cran_packages, function(pkg) if(!requireNamespace(pkg, quietly = TRUE)){install.packages(pkg)})
-# sapply(bioc_packages, function(pkg) if (!requireNamespace(pkg, quietly = TRUE)) BiocManager::install(pkg))
 sapply(github_packages, function(pkg) if (!requireNamespace(strsplit(pkg, "/")[[1]][2], quietly = TRUE)) remotes::install_github(pkg))
-lapply(c(cran_packages), require, character.only = TRUE)
+if (!requireNamespace("COSG", quietly = TRUE)) remotes::install_github("genecell/COSGR")
+lapply(c(cran_packages, "presto","COSG","SCMarker"), require, character.only = TRUE)
+
 
 #' LMD: Genes were ranked by the increasing order of Cumulative Diffusion-KL score
 library(LocalizedMarkerDetector)
@@ -145,11 +146,78 @@ hs_results = hs.compute_autocorrelations()
   write.table(marker,file = dir.file,row.names = TRUE)
 }
 
-#' Seurat v4 Wilcoxon unfiltered: Genes were ranked by their lowest adjusted P-value in any cluster (increasing order), if two genes had the same, prioritize genes with larger FC.
-RunSeuratv4 <- function(srat_obj, input_genes, feature_space, dir.file){
+#' ## SCMarker
+#' https://github.com/KChen-lab/SCMarker
+#' No rank is provided, only provide a set of genes
+RunSCMarker <- function(dat, feature_space, dir.file = NULL){
+  res = ModalFilter(data=dat,geneK=10,cellK=10,width=2)
+  res = GeneFilter(res)
+  res = getMarker(res, k = 300, n = 30)
+  marker = data.frame(gene = rownames(dat), row.names = rownames(dat))
+  marker[res$marker,"rank"] = 1
+  marker$rank[is.na(marker$rank)] = nrow(marker)
+  
+  if(is.null(dir.file)){return(marker)}else{
+    write.table(marker,file = dir.file,row.names = TRUE)
+  }
+}
+
+#' ## COSG
+#' https://github.com/genecell/COSGR/blob/main/vignettes/quick_start.Rmd
+#' Genes were ranked by their largest COSG score in any cluster (decreasing order)
+RunCOSG <- function(srat_obj, input_genes, feature_space, dir.file = NULL, res = 1.5){
   n_dim = dim(feature_space)[2]
-  srat_obj <- FindNeighbors(srat_obj, dims = 1:n_dim)
-  srat_obj <- FindClusters(srat_obj, resolution = 1.5, algorithm = 3)
+  srat_obj[["pca"]]@cell.embeddings = feature_space
+  srat_obj <- FindNeighbors(srat_obj, dims = 1:n_dim, reduction = "pca")
+  srat_obj <- FindClusters(srat_obj, resolution = res, algorithm = 3)
+  # if(nlevels(Idents(srat_obj)) > 50){
+  #   return(NULL)
+  # }
+  marker <- cosg(
+    subset(srat_obj,features = input_genes),
+    groups='all',
+    assay='RNA',
+    slot='data',
+    mu=1,
+    n_genes_user=length(input_genes))
+  marker <- dplyr::bind_cols(
+    tidyr::pivot_longer(
+      marker$names,
+      cols = everything(),
+      names_to = "cluster",
+      values_to = "gene"
+    ),
+    dplyr::select(
+      tidyr::pivot_longer(
+        marker$scores,
+        cols = everything(),
+        names_to = "cluster",
+        values_to = "raw_statistic"
+      ),
+      -cluster)
+  )
+  marker = marker  %>%
+    group_by(gene) %>%
+    filter(raw_statistic == max(raw_statistic)) %>%
+    select(gene,raw_statistic) %>% distinct()
+  marker[order(marker$raw_statistic,decreasing = TRUE),"rank"] = 1:nrow(marker)
+
+  if(!is.null(dir.file)){
+    write.table(marker,file = dir.file, row.names = TRUE)
+  }else{
+    return(marker)
+  }
+}
+
+#' Seurat v4 Wilcoxon unfiltered: Genes were ranked by their lowest adjusted P-value in any cluster (increasing order), if two genes had the same, prioritize genes with larger FC.
+RunSeuratv4 <- function(srat_obj, input_genes, feature_space, dir.file = NULL, res = 1.5){
+  n_dim = dim(feature_space)[2]
+  srat_obj[["pca"]]@cell.embeddings = feature_space
+  srat_obj <- FindNeighbors(srat_obj, dims = 1:n_dim, reduction = "pca")
+  srat_obj <- FindClusters(srat_obj, resolution = res, algorithm = 3)
+  # if(nlevels(Idents(srat_obj)) > 50){
+  #   return(NULL)
+  # }
   marker <- presto:::wilcoxauc.Seurat(X = subset(srat_obj,features = input_genes),
                                       assay = "data", 
                                       seurat_assay = "RNA")
@@ -157,7 +225,11 @@ RunSeuratv4 <- function(srat_obj, input_genes, feature_space, dir.file){
   gene_rank = marker %>% arrange(.,padj,desc(logFC)) %>% distinct(.,gene, .keep_all = TRUE) %>% select(gene)
   gene_rank$'rank' = 1:nrow(gene_rank)
   marker <- merge(marker,gene_rank,by = "gene")
-  write.table(marker,file = dir.file, row.names = TRUE)
+  if(!is.null(dir.file)){
+    write.table(marker,file = dir.file, row.names = TRUE)
+  }else{
+    return(marker)
+  }
 }
 
 #' Marcopolo
@@ -227,4 +299,41 @@ quick_marker_benchmark <- function(gene_rank_vec,
   }))
   names(auc_vec) = names(gt_list)
   return(auc_vec)
+}
+
+quick_marker_benchmark_plot <- function(gene_rank_vec,
+                                   folder_path,
+                                   tissue_name){
+  max_logfc = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c1.txt"))) %>% rownames()
+  celldb_marker = read.table(file.path(folder_path, paste0(tissue_name,"_ground_truth_c2.txt")))[,1]
+  gt_list = c(lapply(seq(50,1000,50),function(x) max_logfc[1:x]),list(celldb_marker))
+  names(gt_list) = c(paste0("Top",seq(50,1000,50)),"CellMarkerDB")
+  df_benchmark = data.frame(gene_rank_vec,row.names = names(gene_rank_vec))
+  
+  pl_roc = lapply(names(gt_list),function(i){
+    true_marker = gt_list[[i]]
+    df_benchmark$"gt" = 0
+    df_benchmark[true_marker,"gt"] = 1
+    
+    library(pROC)
+    roc = roc(df_benchmark$gt, df_benchmark[,1], direction = ">")
+    
+    roc_df <- data.frame(
+      FPR = 1 - roc$specificities,  # False Positive Rate
+      TPR = roc$sensitivities       # True Positive Rate
+    )
+    
+    # Plot AUROC Curve
+    p = ggplot(roc_df, aes(x = FPR, y = TPR)) +
+      geom_line(color = "blue", size = 1) + 
+      geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +  # Diagonal reference line
+      labs(title = paste0(i," (AUC = ", round(auc(roc), 3), ")"),
+           x = "False Positive Rate (1 - Specificity)",
+           y = "True Positive Rate (Sensitivity)") +
+      theme_minimal()
+    p
+  })
+  names(pl_roc) = names(gt_list)
+  return(list(figure = pl_roc,
+              gene_list = gt_list))
 }

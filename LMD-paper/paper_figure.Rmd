@@ -12,12 +12,13 @@ library("dplyr")
 library("patchwork")
 library("ggplot2")
 # library("ggsignif")
+# remotes::install_github("KlugerLab/LocalizedMarkerDetector")
+# remotes::install_github("KlugerLab/GeneTrajectory")
 library("LocalizedMarkerDetector")
 source("paper_figure_function.R", echo = F)
 source("paths.R")
 figure_path = file.path(dir.path0,"figures")
-dir.create(figure_path,recursive = TRUE)
-setwd(figure_path)
+if(!dir.exists(figure_path)){dir.create(figure_path,recursive = TRUE)}
 ```
 
 # SupFig - Bone Marrow Cell Embedding
@@ -27,18 +28,32 @@ data_source = "tabular_muris"
 folder.path <- file.path(dir.path,data_source)
 tissue_name = "marrow_facs"
 tiss <- readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
-cell_label = tiss$cell_ontology_class
-coldef = setNames(colorRampPalette(brewer.pal(12, "Paired"))(length(unique(cell_label))),unique(cell_label))
-p1 = DimPlot(tiss, group.by = "cell_ontology_class",label = FALSE, cols = coldef) + guides(color = guide_legend(ncol = 1,override.aes = list(size = 3))) + labs(title = NULL)
+unique_labels <- unique(tiss$cell_ontology_class)
+label_numbers <- setNames(seq_along(unique_labels), unique_labels)
+tiss$cell_number <- as.character(label_numbers[tiss$cell_ontology_class])
+Idents(tiss) <- tiss$cell_number 
+coldef <- setNames(colorRampPalette(brewer.pal(12, "Paired"))(length(label_numbers)), 
+                   label_numbers)
+p1 <- DimPlot(tiss, group.by = "cell_number", label = TRUE, cols = coldef) +
+  guides(color = guide_legend(ncol = 1, override.aes = list(size = 3))) +
+  scale_color_manual(values = coldef, labels = paste0(seq_along(unique_labels), " - ", unique_labels)) +  # Modify legend labels
+  labs(title = NULL)
 
 tissue_name = "marrow_droplet"
 tiss <- readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
-cell_label = tiss$cell_ontology_class
-coldef = setNames(colorRampPalette(brewer.pal(12, "Paired"))(length(unique(cell_label))),unique(cell_label))
-p2 = DimPlot(tiss, group.by = "cell_ontology_class",label = FALSE, cols = coldef) + guides(color = guide_legend(ncol = 1,override.aes = list(size = 3))) + labs(title = NULL)
+unique_labels <- unique(tiss$cell_ontology_class)
+label_numbers <- setNames(seq_along(unique_labels), unique_labels)
+tiss$cell_number <- as.character(label_numbers[tiss$cell_ontology_class])
+Idents(tiss) <- tiss$cell_number 
+coldef <- setNames(colorRampPalette(brewer.pal(12, "Paired"))(length(label_numbers)), 
+                   label_numbers)
+p2 <- DimPlot(tiss, group.by = "cell_number", label = TRUE, cols = coldef) +
+  guides(color = guide_legend(ncol = 1, override.aes = list(size = 3))) +
+  scale_color_manual(values = coldef, labels = paste0(seq_along(unique_labels), " - ", unique_labels)) +  # Modify legend labels
+  labs(title = NULL)
 
 p = ((p1 / p2) + plot_annotation(tag_levels = 'A')) & theme(plot.tag = element_text(size = 20))
-ggsave(filename = file.path(figure_path,"supfig-bonemarrow.png"), plot = p, width = 8, height = 10, dpi = 300)
+ggsave(filename = file.path(figure_path,"supfig-bonemarrow.png"), plot = p, width = 9, height = 10, dpi = 300)
 ```
 
 # Fig - Pipeline
@@ -82,18 +97,18 @@ ggsave(filename = file.path(figure_path,"fig-pipeline3.png"), plot = p, width = 
 
 # Fig - the AUROC given the rank and the ground truth
 ```{r}
-method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_no_filter","hvg")
-method_fullname = setNames(c("LMD","singleCellHaystack","Hotspot","Marcopolo","SEMITONES","Seurat v4","HVGs"),method_ls)
+method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_no_filter","hvg", "cosg", "scmarker")
+method_fullname = setNames(c("LMD","singleCellHaystack","Hotspot","Marcopolo","SEMITONES","Seurat v4","HVGs", "COSG", "SCMarker"),method_ls)
 ```
 ```{r}
 dir.path <- dir.path0
-data_source = "tabular_muris"
-tissue_name = "marrow_facs"
+# data_source = "tabular_muris"
+# tissue_name = "marrow_facs"
 folder.path = file.path(dir.path,"benchmark")
 ```
 ```{r}
 # Define Full name
-tissue_ls = list("tabular_muris" = c("marrow_facs","pancreas_facs","lung_facs"),
+tissue_ls = list("tabular_muris" = c("marrow_facs","pancreas_facs","lung_facs","marrow_droplet"),
                  "azimuth" = c("human_kidney", "human_bone_marrow", "human_pancreas", "mouse_motor_cortex", "human_lung_hlca", "human_motor_cortex"))
 data_source_full_name = c("tabular_muris" = "Tabular Muris","azimuth" = "Azimuth")
 tissue_full_name = lapply(unlist(tissue_ls),function(i){
@@ -108,20 +123,13 @@ tissue_full_name = lapply(unlist(tissue_ls),function(i){
   tmp_name
 })
 names(tissue_full_name) = unlist(tissue_ls)
-tissue_full_name = unlist(lapply(1:length(tissue_full_name),function(i){
-  ori_name = names(tissue_full_name)[i]
-  if(grepl("_facs|mouse",ori_name)){
-    tmp_name = paste0("Mouse-\n",tissue_full_name[i])
-  }
-  else if(grepl("human",ori_name)){
-    tmp_name = paste0("Human-\n",tissue_full_name[i])
-  }
-  else{
-    tmp_name = tissue_full_name[i]
-  }
-  tmp_name
-}))
-names(tissue_full_name) = unlist(tissue_ls)
+tissue_full_name = unlist(tissue_full_name)
+tissue_full_name["human_motor_cortex"] = paste0(tissue_full_name["human_motor_cortex"],"(Human)")
+tissue_full_name["mouse_motor_cortex"] = paste0(tissue_full_name["mouse_motor_cortex"],"(Mouse)")
+
+# add technologies as suffix
+techs = c(rep("FACS",3),"Droplet","10x","Cite-seq","Smart-seq2","10x","10x","Smart-seq v4")
+tissue_full_name = setNames(paste0(tissue_full_name," ","(",techs,")"),names(tissue_full_name))
 ```
 ```{r}
 df_auc = do.call(rbind,
@@ -134,16 +142,98 @@ df_auc = do.call(rbind,
                   }
                   df_all$'data_source' = names(tissue_ls)[i]
                   df_all}))
-df_auc$Method = method_fullname[df_auc$Method]
-df_auc = df_auc %>% filter(gt_set %in% c("CellMarkerDB","Top100"))
+```
+## Louvain resolution for Cluster-dependent methods
+```{r}
+# Plot performance for each datasets
+method_subls = c("wilcox_no_filter","cosg")
+df_auc_sub = do.call(rbind,lapply(method_subls, function(method){
+  df = do.call(rbind,
+        lapply(1:length(tissue_ls),function(i){
+            df_all = NULL
+            for(j in tissue_ls[[i]]){
+                df = read.table(file.path(folder.path, names(tissue_ls)[i],method,paste0(j,"_auroc.csv")),header = TRUE)
+                df$'Tissue' = j
+                df_all = rbind(df_all,df)
+            }
+            df_all$'data_source' = names(tissue_ls)[i]
+            df_all}))
+  df$'Method' = method
+  df
+}))
+```
+```{r}
+# plot louvain-clustering vs. real celltype
+df_tmp = do.call(rbind,
+        lapply(1:length(tissue_ls),function(i){
+            df_all = NULL
+            for(j in tissue_ls[[i]]){
+                df = read.table(file.path(folder.path, names(tissue_ls)[i],paste0(j,"_louvain_clusters.csv")),header = TRUE)
+                df$'Tissue' = j
+                df_all = rbind(df_all,df)
+            }
+            df_all$'data_source' = names(tissue_ls)[i]
+            df_all}))
+df_tmp$Tissue = tissue_full_name[df_tmp$Tissue]
+df_tmp <- df_tmp %>%
+  mutate(Tissue = factor(Tissue, levels = unique(Tissue[rev(order(data_source))])))
+
+p = df_tmp %>% ggplot(aes(x = as.factor(res), y = ncluster, group = 1)) + 
+  geom_line() + geom_hline(aes(yintercept = ncelltype), color="red", linetype="dashed") + 
+    facet_wrap(~Tissue, scales = "free") + xlab("Resolution") + ggtitle("The number of Louvain clusters by different resolution")
+ggsave(filename = file.path(figure_path,"supfig-seurat_performance1.png"), 
+       plot = p, width = 10, height = 5)
+```
+```{r}
+# plot Seurat
+df_tmp = df_auc_sub %>% filter(gt_set %in% c("CellMarkerDB","Top100"))
+df_tmp$gt_set = as.factor(df_tmp$gt_set); levels(df_tmp$gt_set) = c("Trueset1","Trueset2")
+df_tmp$Tissue = tissue_full_name[df_tmp$Tissue]
+df_tmp <- df_tmp %>%
+  mutate(Tissue = factor(Tissue, levels = unique(Tissue[rev(order(data_source))])))
+
+pl = lapply(method_subls,function(method){
+  df_tmp %>% filter(Method == method) %>% ggplot(aes(x = as.factor(res), y = AUROC, group = gt_set, color = gt_set)) + 
+  geom_line() + 
+    facet_wrap(~Tissue) +
+    ggtitle(method_fullname[method]) + xlab("Resolution")
+})
+p = wrap_plots(pl, nrow = 2)
+ggsave(filename = file.path(figure_path,"supfig-seurat_performance.png"), 
+       plot = p, width = 16, height = 16)
+```
+```{r}
+# # Replace cluster-dependent method w/ resolution of maximum performance
+# df_auc_sub %>% 
+#   filter(gt_set %in% c("Top100", "CellMarkerDB")) %>% 
+#   group_by(res) %>% 
+#   summarize(median_AUROC = median(AUROC, na.rm = TRUE)) %>% 
+#   arrange(desc(median_AUROC))
+# 
+# default_res = 5
+# # df_auc_sub = df_auc_sub %>%
+# #     group_by(Tissue, gt_set, data_source, Method) %>%
+# #     filter(AUROC == max(AUROC))
+# df_auc_sub = df_auc_sub %>% filter(res == 5) %>% select(colnames(df_auc))
+# '%notin%' <- Negate('%in%')
+# df_auc = rbind(df_auc %>% filter(Method %notin% method_subls),df_auc_sub)
+```
+## Re-organize table
+```{r}
+# re-organize the df
 # Order Method based on mean AUROC
+df_auc$Method = method_fullname[df_auc$Method]
+top_name = "Top100"
+df_auc = df_auc %>% filter(gt_set %in% c("CellMarkerDB",top_name))
 df_auc$Method <- with(df_auc, reorder(Method, -AUROC, FUN = median))
-df_auc$gt_set <- factor(df_auc$gt_set,levels = c("CellMarkerDB","Top100"))
+df_auc$gt_set <- factor(df_auc$gt_set,levels = c("CellMarkerDB",top_name))
 levels(df_auc$gt_set) = c("Criterion1-\n CellMarkerDB","Criterion2-\n MaxFC")
 df_auc$Tissue = tissue_full_name[df_auc$Tissue]
 df_auc$data_source = data_source_full_name[df_auc$data_source]
 df_auc$data_source = factor(df_auc$data_source, levels = data_source_full_name)
 ```
+
+
 ## Figure
 ```{r}
 coldef = setNames(
@@ -182,12 +272,11 @@ wide_data[,1:3] = wide_data[,3:1]; colnames(wide_data)[1:3]=colnames(wide_data)[
 wide_data <- wide_data[order(wide_data$DataSource,wide_data$Tissue,wide_data$Criterion),]
 wide_data[,1:3] = apply(wide_data[,1:3],2,function(x) gsub("[\n]|Criterion1-|Criterion2-","",x))
 wide_data[,1:2] = apply(wide_data[,1:2],2,function(x) {x[duplicated(x)] = "";x})
-wide_data$Tissue[which(wide_data$Tissue == "Mouse-Motor Cortex")] = "Motor Cortex(Mouse)"
-wide_data$Tissue[which(wide_data$Tissue == "Human-Motor Cortex")] = "Motor Cortex(Human)"
-wide_data$Tissue = gsub("Human-|Mouse-","",wide_data$Tissue)
+
+wide_data[,4:ncol(wide_data)] = round(wide_data[,4:ncol(wide_data)],3)
 
 # calculate median rank
-ranked_data <- data.frame(t(apply(wide_data[,4:ncol(wide_data)],1,function(x) rank(-x, na.last = "keep"))), check.names = FALSE)
+ranked_data <- data.frame(t(apply(wide_data[,4:ncol(wide_data)],1,function(x) rank(-x, na.last = "keep", ties.method = "min"))), check.names = FALSE)
 ranked_data$Criterion = wide_data$Criterion
 median_rank = ranked_data %>% group_by(Criterion) %>% summarize(across(1:(ncol(ranked_data)-1), ~ median(.x, na.rm = TRUE)))
 median_rank$DataSource = c("Median Rank",""); median_rank$Tissue = "-"
@@ -200,8 +289,6 @@ wide_data = rbind(wide_data,median_rank)
 # avg_tmp$DataSource = c("Average",""); avg_tmp$Tissue = "-"
 # wide_data = rbind(wide_data,avg_tmp)
 
-wide_data[,4:ncol(wide_data)] = round(wide_data[,4:ncol(wide_data)],3)
-
 bold_max <- function(vec) {
   max_val <- max(vec, na.rm = TRUE)
   vec = unlist(ifelse(vec == max_val, paste0("\\textbf{", vec, "}"), vec))
@@ -212,7 +299,7 @@ wide_data[is.na(wide_data)] = "-"
 
 # write.csv(wide_data, file = file.path(folder.path,"AUROC_table.csv"), row.names = FALSE)
 ```
-## Colored Table figure
+### Colored Table figure
 ```{r}
 library(tidyr)
 
@@ -221,9 +308,9 @@ df_head = wide_data %>% filter(Criterion == " CellMarkerDB") %>% select(c("DataS
 df_head[nrow(df_head),"DataSource"] = ""
 df_head[nrow(df_head),"Tissue"] = "Median Rank"
 df_head$DataSource = c(
-  rep(df_head$DataSource[1],3),
-  rep(df_head$DataSource[4],6),
-  df_head$DataSource[10])
+  rep(df_head$DataSource[1],4),
+  rep(df_head$DataSource[5],6),
+  df_head$DataSource[nrow(df_head)])
 
 pl = lapply(1:2,function(i){
 trueset = unique(wide_data$Criterion)[i]
@@ -239,13 +326,17 @@ df_long <- wide_data_sub %>%
               pivot_longer(cols = all_of(unname(method_fullname)), names_to = "Method", values_to = "Rank"),
             by = c("DataSource","Tissue","Method"))
 
-df_long$Method = factor(df_long$Method, levels = rev(colnames(wide_data)[4:10]))
+df_long$Method = factor(df_long$Method, levels = rev(colnames(wide_data)[-c(1:3)]))
 df_long$DataSource = factor(df_long$DataSource, levels = unique(df_long$DataSource))
+tissue_order = unique(df_long$Tissue[order(df_long$DataSource)]); tissue_order[1:4] = tissue_order[c(2:4,1)]
+df_long <- df_long %>%
+  mutate(Tissue = factor(Tissue, levels = tissue_order))
 
 # Plot the heatmap
 p = ggplot(df_long, aes(x = Tissue, y = Method, fill = Rank)) +
     geom_tile(color = "white") + 
-    scale_fill_distiller(palette = "YlOrBr", direction = -1, na.value = "white") +
+    scale_fill_distiller(palette = "YlOrBr", direction = -1, na.value = "white", limits = c(1, max(df_long$Rank, na.rm = TRUE)), 
+                         breaks = seq(1, max(df_long$Rank, na.rm = TRUE))) +
     # scale_fill_gradient(low = "brown", high = "white", na.value = "white") +
     geom_text(aes(label = AUROC), size = 3) + 
     theme_minimal() + facet_grid(~ DataSource, scales = "free",space = "free", switch = "x") + ggtitle(paste0("True markerset ",i)) + 
@@ -264,10 +355,10 @@ p
 })
 
 p = wrap_plots(pl, nrow = 1) + plot_layout(guides = "collect")
-
-ggsave(filename = file.path(figure_path,"fig-known_marker_comparison.png"), plot = p, width = 12, height = 6)
 ```
-
+```{r}
+ggsave(filename = file.path(figure_path,"fig-known_marker_comparison.png"), plot = p, width = 13, height = 8)
+```
 
 # SupFig-RunTime
 ```{r}
@@ -316,12 +407,18 @@ ggsave(filename = file.path(figure_path,"supfig-runtime.png"), plot = fig, width
 ```
 ## Table
 ```{r}
-df_runtime = df_runtime %>% filter(Method == "LMD") %>% arrange(Time, nCells, nGenes) %>% select(c("Time","nCells","nGenes")) %>% mutate(Time = round(Time, 2))
-colnames(df_runtime)[1] = "Time (min)"
+df_runtime = df_runtime %>% filter(Method == "LMD") %>% arrange(Time, nCells, nGenes) %>% select(c("data_source","Tissue","nCells","ncluster","nGenes","Time")) %>% mutate(Time = round(Time, 2))
+colnames(df_runtime)[grep("Time",colnames(df_runtime))] = "Time (min)"
 write.csv(df_runtime, file = file.path(folder.path,"RunTime_table.csv"), row.names = FALSE)
 ```
 
 # Fig - Gene Ranking Comparisons between LMD and Other Methods
+```{r}
+method_vs = "lmd"
+method_vs_set = c("wilcox_no_filter","cosg","hotspot","marcopolo","scmarker","semi","haystack")
+```
+## Selected genes Table
+### Bone marrow facs
 ```{r}
 dir.path <- dir.path0
 data_source = "tabular_muris"
@@ -329,8 +426,7 @@ tissue_name = "marrow_facs"
 df_benchmark = read.table(file.path(dir.path,"benchmark", data_source, paste0(tissue_name,"_benchmark_rank_table.csv")),header = TRUE)
 rownames(df_benchmark) = df_benchmark$gene
 tiss = readRDS(file.path(dir.path,data_source, paste0(tissue_name,".rds")))
-method_vs = "lmd"
-method_vs_set = c("wilcox_no_filter","hotspot","marcopolo","semi","haystack")
+
 ```
 ```{r}
 sub = do.call(c,lapply(method_vs_set,function(method){
@@ -342,13 +438,70 @@ df_label_all = df_benchmark[unique(sub),c(method_vs,method_vs_set)]
 # df_label_all$'legend' = sapply(seq(nrow(df_label_all)),function(i){
 #   paste(paste(method_fullname[colnames(df_label_all)],df_label_all[i,],sep = ":"),collapse = "\n")
 # })
-g = c("Cd19","Naaa","Mogat2","Grina","Abca13","Zf12","Il2rb","Phgdh","Vpreb2","Fyb") # <100&>500
+# g = c("Cd19","Naaa","Mogat2","Grina","Abca13","Zf12","Il2rb","Phgdh","Vpreb2","Fyb") # <100&>500 # before revision
+
+g = c("Hp","Cyp11a1",#wilcox
+      "1810033B17Rik","Pltp",#cosg
+      "Mogat2","Grina",#hotspot
+      "Abca13","Zf12",#marcopolo
+      "Pilra","Rgs14",#scmarker
+      "Il2rb","Phgdh",#semi
+      "Vpreb2","Fyb"#schaystack
+      ) # <100&>500
+
+df_label = df_label_all[g,]
+df_label = df_label[order(df_label$lmd),]
+colnames(df_label) = method_fullname[colnames(df_label)]
+write.csv(df_label,file = file.path(dir.path,"benchmark", paste0(tissue_name,"_benchmark_rank_table_selectedgenes.csv")),row.names = TRUE)
+```
+### human kidney 10x
+```{r}
+dir.path <- dir.path0
+data_source = "azimuth"
+tissue_name = "human_kidney"
+df_benchmark = read.table(file.path(dir.path,"benchmark", data_source, paste0(tissue_name,"_benchmark_rank_table.csv")),header = TRUE)
+rownames(df_benchmark) = df_benchmark$gene
+tiss = readRDS(file.path(dir.path,data_source, paste0(tissue_name,".rds")))
+tiss = RunUMAP(tiss, dims = 1:20, seed.use = 42)
+```
+```{r}
+# Plot DimPlot
+cell_label = tiss$cell_ontology_class
+coldef = setNames(colorRampPalette(brewer.pal(12, "Paired"))(length(unique(cell_label))),unique(cell_label))
+p1 = DimPlot(tiss, group.by = "cell_ontology_class",label = FALSE, cols = coldef) + guides(color = guide_legend(ncol = 1,override.aes = list(size = 3))) + labs(title = NULL)
+```
+```{r}
+sub = do.call(c,lapply(method_vs_set,function(method){
+  sub = c(which(df_benchmark[,method] <= 100 & df_benchmark[,method_vs] > 500),
+          which(df_benchmark[,method] > 500 & df_benchmark[,method_vs] <= 100) )
+  sub
+}))
+df_label_all = df_benchmark[unique(sub),c(method_vs,method_vs_set)]
+# kidney
+g = c("SPINK8","SPP1",#wilcox
+      "RAMP2","KIAA0101",#cosg
+      "SAA2","GSTA1",#hotspot
+      "MEIS2","AIM1",#scmarker
+      "MUC16","ATF3",#semi
+      "CEACAM6","COX7A1"#schaystack
+      )
+
+df_label = df_label_all[g,]
+df_label = df_label[order(df_label$lmd),]
+colnames(df_label) = method_fullname[colnames(df_label)]
+write.csv(df_label,file = file.path(dir.path,"benchmark", paste0(tissue_name,"_benchmark_rank_table_selectedgenes.csv")),row.names = TRUE)
+```
+## FeaturePlot
+```{r}
 names(g) = rep(method_vs_set,each = 2)
+unified_range <- range(FetchData(tiss, vars = g), na.rm = TRUE)
+
 pl = lapply(1:length(g),function(i){
   x = g[i]
   subtitle = sprintf("%s:%d, %s:%d",method_fullname[method_vs],df_label_all[x,method_vs],method_fullname[names(g)[i]],df_label_all[x,names(g)[i]])
   color_label = ifelse(df_label_all[x,method_vs] > df_label_all[x,names(g)[i]],"blue","red")
-  FeaturePlot(tiss,features = x,order =TRUE) + labs(color = "Expression") + labs(title = x,subtitle = subtitle) + 
+  FeaturePlot(tiss,features = x,order =TRUE,pt.size = 1) + labs(color = "Expression") + scale_color_gradientn(colors = c("lightgrey", "blue"), 
+                          limits = unified_range) + labs(title = x,subtitle = subtitle) + 
     theme(
       plot.title = element_text(face="bold", size = 30,color = color_label),
       plot.subtitle = element_text(size = 20),
@@ -364,10 +517,12 @@ pl = pl[order(seq(length(g))%%2,decreasing = TRUE)]
 pl[[1]] = pl[[1]] + labs(y = "Favored by LMD") + theme(axis.title.y = element_text(size = 20,face="bold", colour = "red"))
 pl[[(length(pl)/2)+1]] = pl[[(length(pl)/2)+1]] + labs(y = "Favored by Other methods") + theme(axis.title.y = element_text(size = 20,face="bold", colour = "blue"))
 
-fig = wrap_plots(pl,nrow = 2)
+fig = wrap_plots(pl,nrow = 2) + plot_layout(guides = "collect")
 
-ggsave(filename = file.path(figure_path,"fig-ranking_comparison2.png"), plot = fig, width = 25, height = 10)
+# ggsave(filename = file.path(figure_path,"fig-ranking_comparison2.png"), plot = fig, width = 35, height = 10)
+ggsave(filename = file.path(figure_path,"Supfig-ranking_comparison2.png"), plot = fig, width = 32, height = 10)
 ```
+## RankComparisonPlot
 ```{r}
 pl_rank = lapply(method_vs_set,function(method){
   df_label = data.frame(df_benchmark[,c(method,method_vs)],label = rownames(df_benchmark))
@@ -409,7 +564,8 @@ for(i in 2:length(pl_rank)){
 }
 p = (wrap_plots(pl_rank,nrow = 1) & theme(legend.position="bottom")) + plot_layout(guides = "collect")
 
-ggsave(filename = file.path(figure_path,"fig-ranking_comparison1.png"), plot = p, width = 25, height = 6)
+# ggsave(filename = file.path(figure_path,"fig-ranking_comparison1.png"), plot = p, width = 35, height = 6)
+ggsave(filename = file.path(figure_path,"Supfig-ranking_comparison1.png"), plot = p, width = 32, height = 6)
 ```
 
 
@@ -509,8 +665,6 @@ ggsave(filename = file.path(figure_path,"fig-ranking_comparison1.png"), plot = p
 # SupFig - Density Index
 ```{r}
 # Set the color code for all methods
-method_ls = c("lmd","haystack","hotspot","marcopolo","semi","wilcox_no_filter","hvg")
-method_fullname = setNames(c("LMD","singleCellHaystack","Hotspot","Marcopolo","SEMITONES","Seurat v4","HVGs"),method_ls)
 coldef = setNames(
   colorRampPalette(brewer.pal(8, "Set1"))(length(method_fullname)),
   method_fullname)
@@ -589,19 +743,30 @@ pl = lapply(c("marrow_facs","marrow_facs_granulocyte"),function(tissue_name){
 score_measure = read.table(file.path(dir.path,"benchmark",data_source,paste0(tissue_name,"_DI.csv")),header = TRUE)
 score_measure$Method = ifelse(score_measure$Method %in% names(method_fullname),method_fullname[score_measure$Method],score_measure$Method)
 total_gene = score_measure %>% filter(Method == "All genes") %>%.$TopGene
+scmarker = score_measure %>% filter(Method == "SCMarker")
 score_measure = score_measure %>%
   filter(Method == "All genes") %>% 
   slice(rep(1:n(), each = length(method_fullname))) %>% 
   mutate(Method = method_fullname) %>%
-  bind_rows(score_measure) %>% filter(Method != "All genes") %>% filter(TopGene %in% c(100,300,500,1000,3000,5000,10000,total_gene)) %>% mutate(TopGene = as.factor(TopGene)) %>% mutate(Method = factor(Method,levels = rev(method_fullname)))
-
+  bind_rows(score_measure) %>% filter(Method != "All genes") 
+if(tissue_name == "marrow_facs"){
+  score_measure = score_measure %>% filter(TopGene %in% c(100,300,500,1000,3000,5000,10000,total_gene))
+}else{
+  score_measure = score_measure %>% filter(TopGene %in% c(20,50,100,500,1000,5000,10000,total_gene))
+}
+score_measure = score_measure %>% mutate(TopGene = as.factor(TopGene)) %>% mutate(Method = factor(Method,levels = rev(method_fullname)))
 levels(score_measure$TopGene)[nlevels(score_measure$TopGene)] = sprintf("All(%d)",total_gene)
+
+numeric_levels = as.numeric(levels(score_measure$TopGene)[!grepl("All", levels(score_measure$TopGene))])
+closest_level <- numeric_levels[which.min(abs(numeric_levels - scmarker$TopGene))]
+score_measure = rbind(score_measure,scmarker %>% mutate(TopGene = factor(closest_level, levels = levels(score_measure$TopGene))))
+levels(score_measure$Method)[grep("SCMarker",levels(score_measure$Method))] = paste0(scmarker$Method," (",scmarker$TopGene," genes)")
 
 fig = ggplot(score_measure, aes(x = TopGene, y = Method, fill = DensityIndex)) + 
   geom_tile(color = "white") +
   scale_fill_gradient(low = "white",high = "red") +
   geom_text(aes(label = round(DensityIndex,3)), size = 3) + theme_minimal() + xlab("# of Top Genes") + ylab("Method") + 
-  ggtitle(ifelse(tissue_name == "marrow_facs", "Bone Marrow","Bone Marrow (granulocyte)")) + 
+  ggtitle(ifelse(tissue_name == "marrow_facs", "Bone Marrow(FACS)","Bone Marrow(FACS) (granulocyte)")) + 
   theme(plot.title = element_text(size = 20, face = "bold"),
           axis.text = element_text(size = 10),
           axis.title = element_text(size = 10),
@@ -616,6 +781,11 @@ ggsave(filename = file.path(figure_path,"supfig-densityindex.png"), plot = fig, 
 
 
 # SupFig - Sensitivity Test
+```{r}
+dir.path <- dir.path0
+data_source = "tabular_muris"
+tissue_name = "marrow_facs"
+```
 ## kNN
 ```{r}
 folder.path = file.path(dir.path,data_source,"intermediate_data", tissue_name, "sensitivity_test")
@@ -627,7 +797,7 @@ df$knn = as.factor(as.numeric(gsub("\\D", "", df$knn)))
 df$Top_Genes = as.factor(df$Top_Genes)
 fig1 = ggplot(data = df, aes(x = knn, y = JaccardIndex, group = Top_Genes, color = Top_Genes)) +
   geom_line() +
-  geom_point() + labs(x = "# of kNN used", y = "Jaccard Index\n (with kNN5)",color = "Top Genes") + geom_vline(xintercept = 3, color="red", linetype="dashed") + 
+  geom_point() + labs(x = "# of kNN used", y = "Jaccard Index\n (vs. kNN5)",color = "Top Genes") + geom_vline(xintercept = "5", color="red", linetype="dashed") + 
   scale_y_continuous(limits = c(0,1)) +
   theme(
     legend.title = element_text(size = 20),
@@ -677,7 +847,7 @@ df$pc = factor(df$pc,levels = c(sort(unique(as.numeric(df$pc))),"tSNE"))
 df$Top_Genes = as.factor(df$Top_Genes)
 fig3 = ggplot(data = df, aes(x = pc, y = JaccardIndex, group = Top_Genes, color = Top_Genes)) +
   geom_line() +
-  geom_point() + labs(x = "# of PC used", y = "Jaccard Index\n (with 20PC)", color = "Top Genes") + geom_vline(xintercept = 2, color="red", linetype="dashed") + 
+  geom_point() + labs(x = "# of PC used", y = "Jaccard Index\n (vs. 20PC)", color = "Top Genes") + geom_vline(xintercept = "20", color="red", linetype="dashed") + 
   scale_y_continuous(limits = c(0,1)) +
   theme(
     legend.title = element_text(size = 20),
@@ -712,15 +882,430 @@ fig4 = ggplot(data = df, aes(x = Parameter, y = AUROC, group = gt_set, color = g
     panel.grid = element_blank(),
     panel.background = element_blank(),
     axis.line = element_line(colour = "black"))
-
-# fig = fig3 + fig4 + plot_annotation(title = "Sensitivity Test: Different PC", theme = theme(plot.title = element_text(size = 20)))
-# ggsave(filename = file.path(figure_path,"supfig-sensitivitypc.png"), plot = fig, width = 16, height = 5)
 ```
+
+## Cell number
 ```{r}
-p = (fig1 + fig2) / (fig3 + fig4) + plot_layout(guides = "collect") + plot_annotation(tag_level = 'A') & theme(plot.tag = element_text(face="bold", size = 20)) 
-ggsave(filename = file.path(figure_path,"supfig-sensitivity.png"), plot = p, width = 16, height = 10)
+folder.path = file.path(dir.path,data_source,"intermediate_data", tissue_name, "sensitivity_test")
+test_para = "cellprop"
+
+## Rank Stability
+df = read.table(file.path(folder.path,sprintf("%s_jaccard_ind_%s.csv",tissue_name,test_para)),header = TRUE)
+df[, c("cellprop","rep")] = do.call(rbind,stringr::str_extract_all(df$cellprop, "(?<=_)\\d+(\\.\\d+)?"))
+df$Top_Genes = as.factor(df$Top_Genes)
+df_summary <- df %>%
+  group_by(cellprop, Top_Genes) %>%
+  summarise(
+    median_Jaccard = median(JaccardIndex),
+    lower = median_Jaccard - sd(JaccardIndex) / sqrt(n()),  # Standard error (SE)
+    upper = median_Jaccard + sd(JaccardIndex) / sqrt(n())
+  )
+
+fig5 = ggplot(data = df_summary, aes(x = cellprop, y = median_Jaccard, group = Top_Genes, color = Top_Genes)) +
+  geom_line() +
+  geom_point() + 
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) + labs(x = "Cell number downsampling proprotion", y = "Jaccard Index\n (vs. Original Data)", color = "Top Genes") + geom_vline(xintercept = "20", color="red", linetype="dashed") + 
+  scale_y_continuous(limits = c(0,1)) +
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+# AUC stability
+df = read.table(file.path(folder.path,sprintf("%s_auroc_%s.csv",tissue_name,test_para)),header = TRUE)
+df = df %>% filter(gt_set %in% c("Top100","CellMarkerDB"))
+df$gt_set = factor(df$gt_set)
+df[, c("cellprop","rep")] = do.call(rbind,stringr::str_extract_all(df$Parameter, "(?<=_)\\d+(\\.\\d+)?"))
+df_summary <- df %>% select(!Parameter) %>%
+  group_by(cellprop, gt_set) %>%
+  summarise(
+    median_auroc = median(AUROC),
+    lower = median_auroc - sd(AUROC) / sqrt(n()),  # Standard error (SE)
+    upper = median_auroc + sd(AUROC) / sqrt(n())
+  )
+
+fig6 = ggplot(data = df_summary, aes(x = cellprop, y = median_auroc, group = gt_set, color = gt_set)) +
+  geom_line() +
+  geom_point() + geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) + 
+  labs(x = "Cell number downsampling proprotion", y = "AUROC", color = "Gold-Standard Genesets") + 
+  scale_y_continuous(limits = c(0,1)) +
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+fig = fig5 + fig6
+ggsave(filename = file.path(figure_path,"supfig-sensitivity-umi.png"), plot = fig, width = 16, height = 5)
 ```
 
+## Data sparsity (UMI)
+```{r}
+folder.path = file.path(dir.path,data_source,"intermediate_data", tissue_name, "sensitivity_test")
+test_para = "umi"
+
+## Rank Stability
+df = read.table(file.path(folder.path,sprintf("%s_jaccard_ind_%s.csv",tissue_name,test_para)),header = TRUE)
+df[, c("umi","rep")] = do.call(rbind,stringr::str_extract_all(df$umi, "(?<=_)\\d+(\\.\\d+)?"))
+df$Top_Genes = as.factor(df$Top_Genes)
+df$umi = as.factor(as.numeric(df$umi))
+df_summary <- df %>%
+  group_by(umi, Top_Genes) %>%
+  summarise(
+    median_Jaccard = median(JaccardIndex),
+    lower = median_Jaccard - sd(JaccardIndex) / sqrt(n()),  # Standard error (SE)
+    upper = median_Jaccard + sd(JaccardIndex) / sqrt(n())
+  )
+
+fig7 = ggplot(data = df_summary, aes(x = umi, y = median_Jaccard, group = Top_Genes, color = Top_Genes)) +
+  geom_line() +
+  geom_point() + 
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) + labs(x = "UMI downsampling proprotion", y = "Jaccard Index\n (vs. Original Data)", color = "Top Genes") + geom_vline(xintercept = "20", color="red", linetype="dashed") + 
+  scale_y_continuous(limits = c(0,1)) +
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15,angle = 45),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+# AUC stability
+df = read.table(file.path(folder.path,sprintf("%s_auroc_%s.csv",tissue_name,test_para)),header = TRUE)
+df = df %>% filter(gt_set %in% c("Top100","CellMarkerDB"))
+df$gt_set = factor(df$gt_set)
+df[, c("umi","rep")] = do.call(rbind,stringr::str_extract_all(df$Parameter, "(?<=_)\\d+(\\.\\d+)?"))
+df$umi = as.factor(as.numeric(df$umi))
+df_summary <- df %>% select(!Parameter) %>%
+  group_by(umi, gt_set) %>%
+  summarise(
+    median_auroc = median(AUROC),
+    lower = median_auroc - sd(AUROC) / sqrt(n()),  # Standard error (SE)
+    upper = median_auroc + sd(AUROC) / sqrt(n())
+  )
+
+fig8 = ggplot(data = df_summary, aes(x = umi, y = median_auroc, group = gt_set, color = gt_set)) +
+  geom_line() +
+  geom_point() + geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) + 
+  labs(x = "UMI downsampling proprotion", y = "AUROC", color = "Gold-Standard Genesets") + 
+  scale_y_continuous(limits = c(0,1)) +
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15,angle = 45),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+fig = fig7 + fig8
+ggsave(filename = file.path(figure_path,"supfig-sensitivity-umi.png"), plot = fig, width = 16, height = 5)
+```
+
+## Binary
+```{r}
+folder.path = file.path(dir.path,data_source,"intermediate_data", tissue_name, "sensitivity_test")
+test_para = "binary"
+
+## Rank Stability
+df = read.table(file.path(folder.path,sprintf("%s_jaccard_ind_%s.csv",tissue_name,test_para)),header = TRUE)
+df$Top_Genes = as.factor(df$Top_Genes)
+p1 = ggplot(data = df %>% filter(get(test_para) %in% c("binary")), 
+            aes(x = Top_Genes, y = JaccardIndex, group = 1)) +
+  geom_line() + labs(x = "Top Genes", y = "Jaccard Index") + ylim(0,1) + 
+  theme_minimal() + ggtitle("Jaccard Index of Binary scale vs. Original scale") +
+  theme(
+    title = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    # panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+df = read.table(file.path(folder.path,sprintf("%s_auroc_%s.csv",tissue_name,test_para)),header = TRUE)
+df = df %>% filter(gt_set %in% c("Top100","CellMarkerDB"))
+df$gt_set = factor(df$gt_set)
+
+p2 = ggplot(data = df %>% filter(gt_set %in% c("CellMarkerDB","Top100")) %>% mutate(Parameter = as.factor(Parameter)), 
+            aes(x = gt_set, y = AUROC, group = Parameter, fill = Parameter)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  labs(x = "Gold-Standard Geneset", fill = "Scales") + ylim(0,1) +  
+  theme_minimal() + ggtitle("AUROC of two scales") +
+  theme(
+    title = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    # panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+ggsave(filename = file.path(figure_path,"supfig-sensitivity-binary.png"), plot = p1 + p2, width = 18, height = 10)
+```
+
+## Alternative graphs
+```{r}
+folder.path = file.path(dir.path,data_source,"intermediate_data", tissue_name, "sensitivity_test")
+test_para = "graph"
+
+## Rank Stability
+df = read.table(file.path(folder.path,sprintf("%s_jaccard_ind_%s.csv",tissue_name,test_para)),header = TRUE)
+df$Top_Genes = as.factor(df$Top_Genes)
+
+p1 = ggplot(data = df %>% filter(get(test_para) != "kNN"), 
+            aes(x = Top_Genes, y = JaccardIndex, group = graph, color = graph)) +
+  geom_line() + labs(x = "Top Genes", y = "Jaccard Index", color = "Graphs") + ylim(0,1) + 
+  theme_minimal() + ggtitle("Jaccard Index (vs. kNN graph)") +
+  theme(
+    title = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    # panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+df = read.table(file.path(folder.path,sprintf("%s_auroc_%s.csv",tissue_name,test_para)),header = TRUE)
+df = df %>% filter(gt_set %in% c("Top100","CellMarkerDB"))
+df$gt_set = factor(df$gt_set)
+
+p2 = ggplot(data = df %>% filter(gt_set %in% c("CellMarkerDB","Top100")) %>% mutate(Parameter = as.factor(Parameter)), 
+            aes(x = gt_set, y = AUROC, group = Parameter, fill = Parameter)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  labs(x = "Gold-Standard Geneset", fill = "Graphs") + ylim(0,1) +  
+  theme_minimal() + ggtitle("AUROC of different graphs") +
+  theme(
+    title = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    # panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+ggsave(filename = file.path(figure_path,"supfig-sensitivity-graph.png"), plot = p1 + p2, width = 18, height = 10)
+```
+
+## Ambient RNA
+```{r}
+folder.path = file.path(dir.path,"simulated_pancreas", "sensitivity_test")
+test_para = "ambient"
+
+## Rank Stability
+df = read.table(file.path(folder.path,sprintf("jaccard_ind_%s.csv",test_para)),header = TRUE)
+df$Top_Genes = as.factor(df$Top_Genes)
+
+p1 = ggplot(data = df %>% filter(get(test_para) != "original"), 
+            aes(x = Top_Genes, y = JaccardIndex, group = get(test_para), color = get(test_para))) +
+  geom_line() + labs(x = "Top Genes", y = "Jaccard Index", color = "Contamination level") + ylim(0,1) + 
+  theme_minimal() + ggtitle("Jaccard Index (vs. uncontaminated)") +
+  theme(
+    title = element_text(size = 20),
+    legend.title = element_text(size = 15),
+    legend.text = element_text(size = 10),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    # panel.grid = element_blank(),
+    legend.position = "bottom",
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+contaminated_genes = readRDS(file.path(dir.path,"simulated_pancreas","gene500.rds"))
+
+# Spearman correlation of the rank of 500 contaminated genes (scatterplot)
+df = reshape2::melt(score_ranked %>% mutate(gene = row.names(score_ranked)) %>% filter(gene %in% contaminated_genes),id = c("original","gene"),variable.name = "level",value.name = "rank")
+cor_results <- df %>%
+  group_by(level) %>%
+  summarize(spearman = cor(rank, original, method = "spearman")) %>%
+  mutate(label = paste0("Spearman: ", round(spearman, 4)))
+
+p2 = ggplot(df, aes(x = original, y = rank)) +
+  geom_point() + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "blue") +  
+  facet_wrap(~ level) + 
+  geom_text(data = cor_results, aes(x = Inf, y = Inf, label = label),
+            hjust = 1.2, vjust = 1.2, size = 4, color = "red", fontface = "bold") + 
+  theme_minimal() +
+  labs(title = "Rank Comparison for 500 contaminated genes",
+       x = "Rank (uncontaminated data)",
+       y = "Rank (contaminated data)",
+       color = "Contamination Level") +  
+  theme_minimal() + 
+  theme(
+    title = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    strip.text = element_text(size = 15),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    # panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+ggsave(filename = file.path(figure_path,"supfig-sensitivity-ambient.png"), plot = p1 + p2 + plot_layout(widths = c(1, 2)), width = 18, height = 6)
+```
+
+## Graph Coarse-graining
+```{r}
+data_source = "azimuth"
+tissue_name = "human_bone_marrow"
+
+folder.path = file.path(dir.path,data_source,"intermediate_data", tissue_name, "sensitivity_test")
+test_para = "cg"
+
+## Rank Stability
+df = read.table(file.path(folder.path,sprintf("jaccard_ind_%s.csv",test_para)),header = TRUE)
+df$Top_Genes = as.factor(df$Top_Genes)
+df$Ncell = as.factor(df$Ncell)
+
+p1 = ggplot(data = df, aes(x = Ncell, y = JaccardIndex, group = Top_Genes, color = Top_Genes)) +
+  geom_line() + geom_point() + labs(x = "Ncell for coarse-grained cell graph", y = "Jaccard Index\n (vs. Original graph)", color = "Top Genes") + geom_vline(xintercept = "30651", color="red", linetype="dashed") + 
+  scale_y_continuous(limits = c(0,1)) +
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15, angle = 45),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+# AUC stability
+df = read.table(file.path(folder.path,sprintf("auroc_%s.csv",test_para)),header = TRUE)
+df = df %>% filter(gt_set %in% c("Top100","CellMarkerDB"))
+df$Parameter = as.factor(df$Parameter)
+df$gt_set = factor(df$gt_set)
+
+p2 = ggplot(data = df, aes(x = Parameter, y = AUROC, group = gt_set, color = gt_set)) +
+  geom_line() +
+  geom_point()  + 
+  labs(x = "Ncell for coarse-grained cell graph", y = "AUROC", color = "Gold-Standard Genesets") + 
+  scale_y_continuous(limits = c(0,1)) +
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15, angle = 45),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+df = read.table(file.path(folder.path,sprintf("runtime_%s.csv",test_para)),header = TRUE)
+df$nCells = as.factor(df$nCells)
+p3 = ggplot(data = df, aes(x = nCells, y = Time_min, group = 1)) + geom_line() +
+  geom_point()  + 
+  labs(x = "Ncell for coarse-grained cell graph", y = "RunTime (min)") +
+  theme(
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 15),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"))
+
+p = ((p1 + p2) / (p3 + plot_spacer())) + plot_annotation(tag_level = 'A') & theme(plot.tag = element_text(face="bold", size = 20)) 
+ggsave(filename = file.path(figure_path,"supfig-sensitivity-cg.png"), plot = p, width = 16, height = 10)
+```
+
+## Overall Plot
+```{r}
+p = ((fig1 + fig2) / (fig3 + fig4) / (fig5 + NoLegend() + fig6 + NoLegend()) / (fig7+ NoLegend() + fig8+ NoLegend())) + plot_layout(guides = "collect") + plot_annotation(tag_level = 'A') & theme(plot.tag = element_text(face="bold", size = 20)) 
+ggsave(filename = file.path(figure_path,"supfig-sensitivity.png"), plot = p, width = 16, height = 20)
+```
+
+## Cell Type Unbalanced/Connectivity
+```{r}
+data_source = "tabular_muris"
+tissue_name = "marrow_facs"
+dir.path <- dir.path0
+folder.path = file.path(dir.path,data_source)
+
+tiss <- readRDS(file.path(folder.path,paste0(tissue_name,".rds")))
+
+df_benchmark = read.table(file.path(dir.path,"benchmark", data_source, paste0(tissue_name,"_benchmark_rank_table.csv")),header = TRUE)
+rownames(df_benchmark) = df_benchmark$gene
+df_benchmark = df_benchmark[order(df_benchmark$lmd),]
+celldb_marker = read.table(file.path(folder.path,"ground_truth_geneset", paste0(tissue_name,"_ground_truth_c2.txt")))[,1]
+max_logfc = read.table(file.path(folder.path,"ground_truth_geneset", paste0(tissue_name,"_ground_truth_c1.txt"))) %>% rownames()
+
+dat_binary = tiss@assays$RNA@counts > 0
+
+gene_list = lapply(c(seq(100,2000,100),1277),function(x)df_benchmark$gene[1:x])
+names(gene_list) = paste0("lmd_top_",c(seq(100,2000,100),1277))
+max_logfc_list = lapply(c(seq(100,2000,100),1277),function(x) max_logfc[1:x])
+names(max_logfc_list) = paste0("maxfc_top_",c(seq(100,2000,100),1277))
+gene_list = c(gene_list,max_logfc_list,list("CellMarkerDB_1277_genes" = celldb_marker))
+
+cell_label = tiss$cell_ontology_class
+coldef = setNames(colorRampPalette(brewer.pal(12, "Paired"))(length(unique(cell_label))),unique(cell_label))
+
+df_prop = do.call(cbind,lapply(names(gene_list),function(top_gene){
+  genes = gene_list[[top_gene]]
+  nFeatures = colSums(dat_binary)
+  nFeatures_lmd = colSums(dat_binary[genes,])
+  prop = nFeatures_lmd/length(genes)
+  prop
+}))
+colnames(df_prop) = names(gene_list)
+tiss = AddMetaData(tiss,data.frame(df_prop))
+
+pl <- lapply(colnames(df_prop),function(top_gene){
+  # FeaturePlot(tiss, features = top_gene, order = TRUE) + scale_color_gradient(low = "lightgrey", high = "blue", limits = c(0,1))
+  Idents(tiss) = tiss$cell_ontology_class
+  VlnPlot(tiss, features = top_gene, cols = coldef) + ylim(0,1)
+})
+p = wrap_plots(pl, nrow = 5) & NoAxes()
+ggsave(filename = "1.png",p,width = 15,height = 15)
+
+p = (wrap_plots(pl, nrow = 5) & theme(legend.position = "bottom",axis.text.x = element_blank()) ) + plot_layout(guides = "collect")
+ggsave(filename = "1.png",p,width = 28, height = 12)
+
+VlnPlot(tiss, features = c("lmd_top_1300", "CellMarkerDB_1277_genes"), 
+        group.by = "cell_ontology_class", 
+        stack = TRUE) + xlab("Proportion") + 
+        theme(legend.position = "none") + 
+  coord_cartesian(xlim = c(0,0.45))
+```
 
 # SupFig - Gene Modules - Bone Marrow
 ## Cut-off of localized genes

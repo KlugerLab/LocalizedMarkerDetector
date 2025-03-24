@@ -164,7 +164,7 @@ fast_calculate_score_profile_largeData <- function(W, max_time = 2^15, init_stat
       break
     }
     # Check the sparsity of P, if too dense, transfer it to dense matrix
-    if(is_sparse_matrix(P) && (min(rowSums(P == 0)/ncol(P)) < 0.9)){
+    if(is_sparse_matrix(P) && (min(Matrix::rowSums(P == 0)/ncol(P)) < 0.9)){
       P = as.matrix(P)
     }
     # cat("Graph dyadic\n")
@@ -369,12 +369,18 @@ fast_get_lmds <- function(W, max_time = 2^15, init_state, P_ls = NULL, correctio
 #' @export
 LMD <- function(expression, feature_space, knn = 5, 
                 kernel = FALSE, max_time = 2^20, adjust_bridge = TRUE, self_loop = 1,
-                score_correction = FALSE, largeData = TRUE, highres = FALSE, min_cell = 5){
+                score_correction = FALSE, largeData = TRUE, highres = FALSE, min_cell = 5, kernel_used = NULL){
   if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
-  if(kernel){
-    W = ConstructGaussianGraph(knn = knn, feature_space = feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = self_loop)$'graph'
+  if(!kernel){
+    W = ConstructKnnGraph(knn = knn, feature_space = feature_space, adjust_disconnection = adjust_bridge, self_loop = self_loop)$'graph'
   }else{
-    W = ConstructKnnGraph(knn = knn, feature_space = feature_space, adjust_by_MST = adjust_bridge, self_loop = self_loop)$'graph'
+    if(kernel_used == "SNN"){
+      W = ConstructSNNGraph(knn = knn, feature_space = feature_space, self_loop = self_loop)$'graph'
+    }else if(kernel_used == "Gaussian"){
+      W = ConstructGaussianGraph(knn = knn, feature_space = feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = self_loop)$'graph'
+    }else{
+      stop("Please provide graph type: SNN or Gaussian")
+    }
   }
   rho = RowwiseNormalize(expression)
   rho = rho[,colnames(W),drop = FALSE]
@@ -477,7 +483,7 @@ Calculate_outgoing_weight <- function(W, max_time = 2^15, init_state){
       break
     }
     # Check the sparsity of P, if too dense, transfer it to dense matrix
-    if(is_sparse_matrix(P) && (min(rowSums(P == 0)/ncol(P)) < 0.9)){
+    if(is_sparse_matrix(P) && (min(Matrix::rowSums(P == 0)/ncol(P)) < 0.9)){
       P = as.matrix(P)
     }
     # cat("Graph dyadic\n")
