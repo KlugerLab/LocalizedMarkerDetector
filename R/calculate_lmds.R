@@ -360,28 +360,46 @@ fast_get_lmds <- function(W, max_time = 2^15, init_state, P_ls = NULL, correctio
 #' @param largeData logical; if TRUE, uses functions optimized for large matrix multiplication. Default is TRUE.
 #' @param highres logical; if TRUE, uses fine time scales (0, 1, 2, 3, ...). If FALSE, uses dyadic time scales (0, 2, 4, ...). Default is FALSE.
 #' @param min_cell integer; removes genes expressing in fewer than this number of cells. Default is 5.
-#'
+#' @param kernel_used character; kernel type used when \code{kernel = TRUE}. Options are \code{"Gaussian"} or \code{"SNN"}.
+#' @param alpha numeric; exponent used in the alpha-decaying Gaussian kernel
+#' @param coef numeric; coefficient for adaptive bandwidth. Default is 1.
+#' @param epsilon numeric; threshold below which edge weights are set to zero to sparsify the graph. Default is 1e-3.
+#' @param graph.affinity matrix; user-supplied cell-cell affinity matrix. If provided, \code{feature_space} and graph construction parameters are ignored.
+#' 
+#' 
 #' @return A list containing:
 #' \item{score_profile}{data frame; the computed score profile for different diffusion times.}
 #' \item{cumulative_score}{numeric vector; the LMD score for each gene.}
 #'
 #'
 #' @export
-LMD <- function(expression, feature_space, knn = 5, 
+LMD <- function(expression, feature_space = NULL, knn = 5, 
                 kernel = FALSE, max_time = 2^20, adjust_bridge = TRUE, self_loop = 1,
-                score_correction = FALSE, largeData = TRUE, highres = FALSE, min_cell = 5, kernel_used = NULL){
-  if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
-  if(!kernel){
-    W = ConstructKnnGraph(knn = knn, feature_space = feature_space, adjust_disconnection = adjust_bridge, self_loop = self_loop)$'graph'
-  }else{
-    if(kernel_used == "SNN"){
-      W = ConstructSNNGraph(knn = knn, feature_space = feature_space, self_loop = self_loop)$'graph'
-    }else if(kernel_used == "Gaussian"){
-      W = ConstructGaussianGraph(knn = knn, feature_space = feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = self_loop)$'graph'
+                score_correction = FALSE, largeData = TRUE, highres = FALSE, min_cell = 5, 
+                kernel_used = NULL, alpha = 10, coef = 1, epsilon = 1e-3, graph.affinity = NULL){
+  if(!is.null(feature_space)){
+    if(any(colnames(expression) != rownames(feature_space))){stop("Cells in expression mtx and feature space don't match.")}
+    if(!kernel){
+      W = ConstructKnnGraph(knn = knn, feature_space = feature_space, adjust_disconnection = adjust_bridge, self_loop = self_loop)$'graph'
     }else{
-      stop("Please provide graph type: SNN or Gaussian")
+      if(kernel_used == "SNN"){
+        W = ConstructSNNGraph(knn = knn, feature_space = feature_space, self_loop = self_loop)$'graph'
+      }else if(kernel_used == "Gaussian"){
+        W = ConstructGaussianGraph(knn = knn, feature_space = feature_space, alpha = alpha, coef = coef, epsilon = epsilon, self_loop = self_loop)$'graph'
+      }else{
+        stop("Please provide graph type: SNN or Gaussian (otherwise please set kernel = FALSE)")
+      }
     }
+  }else{
+    if(is.null(graph.affinity)){
+      stop("Graph affinity is not provided.")
+    }
+    if(any(colnames(expression) != rownames(graph.affinity))){
+      stop("Cells in expression mtx and feature space don't match.")
+    }
+    W = graph.affinity
   }
+  
   rho = RowwiseNormalize(expression)
   rho = rho[,colnames(W),drop = FALSE]
   rho = rho[which(apply(rho,1,function(x) sum(x>0) >= min_cell))
@@ -442,6 +460,49 @@ show_result_lmd <- function(res.lmd, kneeplot = FALSE){
   # print(head(df,n = 10))
   gene_rank = setNames(df$'rank',rownames(df))
   return(list(gene_table = df, gene_rank = gene_rank, cut_off_gene = gene_rank[1:knee_point(score, plot.fig = kneeplot)]))
+}
+
+
+#' Cell graph coarse graining
+#'
+#' Aggregates cells into coarse-grained groups using k-means clustering, and updates the gene expression matrix and cell-cell affinity matrix accordingly. 
+#' This is useful for testing or reducing computational complexity in downstream analyses.
+#'
+#' @param feature_space matrix; the low-dimensional feature space of cells (e.g., PCA or UMAP coordinates), with cells as rows and dimensions as columns.
+#' @param expression matrix; the gene expression matrix with features (genes) as rows and cells as columns.
+#' @param graph.affinity matrix; the cell-cell affinity matrix to be coarse-grained.
+#' @param N integer; the number of coarse-grained groups to form using k-means clustering. Default is 5000.
+#' @param random.seed integer; random seed to ensure reproducibility. Default is 1.
+#'
+#' @return A list containing:
+#' \item{expression}{matrix; coarse-grained gene expression matrix (genes × groups).}
+#' \item{graph}{matrix; updated cell-cell affinity matrix between coarse-grained groups.}
+#'
+#' @export
+CoarseGrain <- function (feature_space, expression, graph.affinity, 
+                         N = 5000, random.seed = 1) 
+{
+  message("Run k-means clustering")
+  set.seed(random.seed)
+  km.res <- stats::kmeans(feature_space, N, iter.max = 50)
+  message("Coarse-grain matrices")
+  KNN.membership.mat <- matrix(0, nrow = N, ncol = nrow(feature_space))
+  for (i in 1:ncol(KNN.membership.mat)) {
+    KNN.membership.mat[km.res$cluster[i], i] <- 1
+  }
+  KNN.membership.mat <- KNN.membership.mat/apply(KNN.membership.mat, 
+                                                 1, sum)
+  expression.updated <- expression %*% t(biclust::binarize(KNN.membership.mat, 0))
+  graph.affinity.updated <- KNN.membership.mat %*% graph.affinity %*%
+    t(KNN.membership.mat)
+  
+  colnames(graph.affinity.updated) = rownames(graph.affinity.updated) = paste0("cg",1:ncol(graph.affinity.updated))
+  colnames(expression.updated) = colnames(graph.affinity.updated)
+  output <- list()
+  output[["expression"]] <- expression.updated
+  output[["graph"]] <- graph.affinity.updated
+
+  return(output)
 }
 
 

@@ -19,12 +19,3 @@ A ggplot2 object representing the plotted graph.
 \description{
 Visualizes a graph using a given affinity matrix and node layout.
 }
-\examples{
-affinity_m <- matrix(runif(100), nrow = 10)
-layout <- matrix(runif(20), nrow = 10)
-label <- sample(letters[1:3], 10, replace = TRUE)
-plot <- VisualizeGraph(affinity_m, label, layout)
-print(plot)
-
-
-}

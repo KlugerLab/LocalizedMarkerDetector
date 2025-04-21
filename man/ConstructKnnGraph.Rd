@@ -4,14 +4,19 @@
 \alias{ConstructKnnGraph}
 \title{Construct a Symmetric KNN graph}
 \usage{
-ConstructKnnGraph(knn = 5, feature_space, adjust_disconnection = TRUE, self_loop = 1)
+ConstructKnnGraph(
+  knn = 5,
+  feature_space,
+  adjust_disconnection = TRUE,
+  self_loop = 1
+)
 }
 \arguments{
 \item{knn}{integer; the number of nearest neighbors to consider for constructing the graph. Default is 5.}
 
 \item{feature_space}{matrix; a cell-by-coordinate matrix (e.g., 20 principal components).}
 
-\item{adjust_disconnection}{boolean; TRUE for connecting disconnected components using Minimum Spanning Trees (MST). Default is TRUE.}
+\item{adjust_disconnection}{boolean; TRUE for fully connecting disconnected components. Default is TRUE.}
 
 \item{self_loop}{integer; weight for self connections (default is 1).}
 }

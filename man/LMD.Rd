@@ -6,7 +6,7 @@
 \usage{
 LMD(
   expression,
-  feature_space,
+  feature_space = NULL,
   knn = 5,
   kernel = FALSE,
   max_time = 2^20,
@@ -15,7 +15,12 @@ LMD(
   score_correction = FALSE,
   largeData = TRUE,
   highres = FALSE,
-  min_cell = 5
+  min_cell = 5,
+  kernel_used = NULL,
+  alpha = 10,
+  coef = 1,
+  epsilon = 0.001,
+  graph.affinity = NULL
 )
 }
 \arguments{
@@ -40,6 +45,16 @@ LMD(
 \item{highres}{logical; if TRUE, uses fine time scales (0, 1, 2, 3, ...). If FALSE, uses dyadic time scales (0, 2, 4, ...). Default is FALSE.}
 
 \item{min_cell}{integer; removes genes expressing in fewer than this number of cells. Default is 5.}
+
+\item{kernel_used}{character; kernel type used when \code{kernel = TRUE}. Options are \code{"Gaussian"} or \code{"SNN"}.}
+
+\item{alpha}{numeric; exponent used in the alpha-decaying Gaussian kernel}
+
+\item{coef}{numeric; coefficient for adaptive bandwidth. Default is 1.}
+
+\item{epsilon}{numeric; threshold below which edge weights are set to zero to sparsify the graph. Default is 1e-3.}
+
+\item{graph.affinity}{matrix; user-supplied cell-cell affinity matrix. If provided, \code{feature_space} and graph construction parameters are ignored.}
 }
 \value{
 A list containing:

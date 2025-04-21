@@ -9,7 +9,10 @@ reference:
     #   Construct cell graphs
     contents:
       - '`ConstructKnnGraph`'
+      - '`ConstructGaussianGraph`'
+      - '`ConstructSNNGraph`'
       - '`ConstructDiffusionOperators`'
+      - '`CoarseGrain`'
   - title: "Calculate LMD Score"
     # desc: >
     #   Calculate and visualize diffusion scores.

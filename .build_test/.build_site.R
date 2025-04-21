@@ -3,19 +3,25 @@ library(pkgdown)
 
 setwd("/banach1/ruiqi/local_marker/LocalizedMarkerDetector")
 
+# Create docker image
+renv::init()
+renv::snapshot()
+
 # Create Template
 use_readme_rmd()
 # use_news_md()
-use_vignette("Example")
+use_vignette("Example") # create a vignette template called Example
 
 # Build Package
 usethis::use_mit_license("Ruiqi Li")
+# renders README.Rmd -> README.md
 devtools::build_readme()
+# Generates the RcppExports.R and updates NAMESPACE with exported C++ functions
 Rcpp::compileAttributes()
-devtools::document()
+# Generates documentation (.Rd files) from Roxygen comments and updates the NAMESPACE file accordingly.
+devtools::document() 
 # load all function w/o install
 devtools::load_all(".") 
-
 
 # Render
 # rmarkdown::render("vignettes/LMD_demo.Rmd")
@@ -29,6 +35,7 @@ dir_copy("articles", "docs/articles", overwrite = TRUE)
 # file.copy("articles/LMD_cross_comparison_demo.html", "docs/articles/LMD_cross_comparison_demo.html", overwrite = TRUE)
 
 pkgdown::build_site()
+
 devtools::check(vignettes = FALSE)
 
 # Install Package from local

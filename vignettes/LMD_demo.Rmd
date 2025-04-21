@@ -217,6 +217,23 @@ res = show_result_lmd(score_result)
 head(res$gene_table,10)
 ```
 
+# Improve the computational efficiency by cell graph coarse-graining.
+
+For large datasets, we recommend an optional cell graph coarse-graining strategy adapted from [GeneTrajectory](https://klugerlab.github.io/GeneTrajectory/articles/fast_computation.html)[@qu2024gene]. to further reduce computational cost. This approach aggregates cells into a smaller number of "meta-cells" using $k$-means clustering, and defines the expression profile of each meta-cell by summing the expression values of its constituent cells. 
+
+Below is an example of coarse-grain the cell graph by grouping cells into N=1000 "meta-cells".
+
+```{r, warning = FALSE}
+cg_output = CoarseGrain(feature_space, expression = dat, graph.affinity = W, N = 1000)
+W_cg = cg_output$graph
+dat_cg = cg_output$expression
+    
+tic()
+score_result_cg = LMD(dat_cg, max_time = 2^20, graph.affinity = as.matrix(W_cg))
+toc()
+```
+
+
 # Identifying Gene Modules
 
 First, we select the top localized genes based on the knee point of the LMDS distribution.

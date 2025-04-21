@@ -12,12 +12,6 @@
 #'
 #' @return A ggplot2 object representing the plotted graph.
 #'
-#' @examples
-#' affinity_m <- matrix(runif(100), nrow = 10)
-#' layout <- matrix(runif(20), nrow = 10)
-#' label <- sample(letters[1:3], 10, replace = TRUE)
-#' plot <- VisualizeGraph(affinity_m, label, layout)
-#' print(plot)
 #' 
 #' 
 #' @importFrom igraph graph_from_adjacency_matrix V
@@ -72,21 +66,6 @@ VisualizeGraph <- function(affinity_m, label = NULL, layout){
 #'
 #' @return A ggplot2 object representing the custom feature plot.
 #'
-#' @examples
-#' 
-#' # Example with Seurat object
-#' library(Seurat)
-#' seurat_obj <- CreateSeuratObject(matrix(runif(2000), nrow = 200))
-#' seurat_obj <- RunUMAP(seurat_obj, dims = 1:10)
-#' seurat_obj$feature <- rnorm(200)
-#' plot <- CustomFeaturePlot(seurat_obj, "feature", reduction = "umap", title_name = "Feature Plot")
-#' print(plot)
-#' 
-#' # Example with coordinate matrix
-#' coord <- matrix(rnorm(200), nrow = 100, ncol = 2)
-#' value <- rnorm(100)
-#' plot <- CustomFeaturePlot(coord, value, title_name = "Custom Plot")
-#' print(plot)
 #' 
 #' 
 #' @import ggplot2
@@ -232,22 +211,6 @@ VisualizeDiffusion <- function(coord, init_state, P_ls = NULL, W = NULL, check_t
 #'
 #' @return A list of ggplot2 objects representing the feature plots for each module.
 #'
-#' @examples
-#' 
-#' # Example with Seurat object
-#' library(Seurat)
-#' seurat_obj <- CreateSeuratObject(matrix(runif(2000), nrow = 200))
-#' seurat_obj <- RunUMAP(seurat_obj, dims = 1:10)
-#' feature_partition <- factor(sample(letters[1:3], 200, replace = TRUE))
-#' plot_list <- CustomModulePlot(seurat_obj, feature_partition = feature_partition, reduction = "umap")
-#' lapply(plot_list, print)
-#' 
-#' # Example with coordinate matrix
-#' dat <- matrix(runif(2000), nrow = 200)
-#' coord <- matrix(runif(400), nrow = 200, ncol = 2)
-#' feature_partition <- factor(sample(letters[1:3], 200, replace = TRUE))
-#' plot_list <- CustomModulePlot(dat, coord = coord, feature_partition = feature_partition)
-#' lapply(plot_list, print)
 #' 
 #' 
 #' @import ggplot2

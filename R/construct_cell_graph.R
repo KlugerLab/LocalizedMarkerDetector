@@ -148,8 +148,8 @@ ConstructKnnGraph <- function(knn = 5, feature_space,
 #'
 #' @param knn integer; the number of nearest neighbors to consider for each node. Default is 5.
 #' @param feature_space matrix; a cell-by-coordinate matrix (e.g., 20 principal components)
-#' @param alpha numeric; the exponent in the Gaussian kernel computation. Default is 1.
-#' @param coef numeric; used to compute the adaptive bandwidth. Default is 2.
+#' @param alpha numeric; exponent used in the alpha-decaying Gaussian kernel
+#' @param coef numeric; coefficient for adaptive bandwidth. Default is 1.
 #' @param epsilon numeric; threshold below which edge weights are set to zero to sparsify the graph. Default is 1e-3.
 #' @param self_loop numeric; value for the diagonal elements of the affinity matrix to add self-loops. Default is 1.
 #'
@@ -164,7 +164,8 @@ ConstructKnnGraph <- function(knn = 5, feature_space,
 #' @keywords internal
 #' 
 #' @export
-ConstructGaussianGraph <- function(knn = 5, feature_space, alpha = 1, coef = 2, epsilon = 1e-3, self_loop = 1){
+ConstructGaussianGraph <- function(knn = 5, feature_space, alpha = 10, coef = 1, 
+                                   epsilon = 1e-3, self_loop = 1){
   cat("Constructing Gaussian kernel\n")
   node_num = nrow(feature_space)
   knn_list <- FNN::get.knn(feature_space, k = node_num - 1, algorithm = "kd_tree")
@@ -172,8 +173,8 @@ ConstructGaussianGraph <- function(knn = 5, feature_space, alpha = 1, coef = 2, 
   
   # Gaussian Kernel transfer
   knn_dist = knn_list$nn.dist
-  bandwidth = coef * (knn_dist[,knn])^2 # adaptive bandwidth
-  knn_dist = (knn_dist^2 / bandwidth)^alpha
+  bandwidth = coef * (knn_dist[,knn]) # adaptive bandwidth
+  knn_dist = (knn_dist / bandwidth)^alpha
   knn_dist = exp(-knn_dist)
   knn_dist[knn_dist < epsilon] = 0 # make graph sparse
   
@@ -282,7 +283,7 @@ ConstructSNNGraph <- function(knn = 5, feature_space, self_loop = 1, adjust_disc
     }
   }  
   
-  # By definition, the adj mtx should be symmetric
+  # By definition, the adjacency mtx should be symmetric
   W = snn_adj
   diag(W) = self_loop
   A = W > 0

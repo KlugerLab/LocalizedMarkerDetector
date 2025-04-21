@@ -2,8 +2,6 @@
 output: github_document
 ---
 
-<!-- README.md is generated from README.Rmd. Please edit that file -->
-
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
@@ -41,6 +39,24 @@ devtools::install_github("ruiqi0130/LocalizedMarkerDetector")
 
 library("LocalizedMarkerDetector")
 ```
+
+### Docker installation
+
+Alternatively, we provide an option of installing LocalizedMarkerDetector with the accompanied lmd docker environment. The pre-built docker image can be downloaded using
+
+``` bash
+docker pull ruiqi0130/lmd:lastest
+```
+
+and to run the docker container:
+
+``` bash
+docker run -it --rm -e USER=john -e USERID=$(id -u) --name container_name -p 8029:8787  -v /data/:/data/   docker.io/jyc34/bipca-experiment:lastest
+```
+
+Here, change `/data:/data to `<your_local_data_directory>:/data`. A rstudio will be on port 8029. If you would like to link a local bipca installation (for package development, for instance), you can write -v <your_local_bipca_directory:/bipca.
+
+
 
 ## Example tutorial
 Please check [LMD tutorial](https://ruiqi0130.github.io/LocalizedMarkerDetector/articles/).
