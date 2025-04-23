@@ -51,7 +51,7 @@ dir.path0 = "~/" # Specify the directory path where you want to save the data
 file_name = "marrow_facs.rds" # Specify the file name for saving the data
 ```
 ```{r, warning = FALSE, message=FALSE, include = FALSE}
-source("../LMD-paper/paths.R")
+source("paths.R")
 dir.path0 = file.path(dir.path0,"tabular_muris")
 ```
 ```{r, warning = FALSE, message=FALSE}

@@ -1,7 +1,7 @@
 template:
   bootstrap: 3
 
-url: https://github.com/ruiqi0130/LocalizedMarkerDetector
+url: https://github.com/KlugerLab/LocalizedMarkerDetector
 
 reference:
   - title: "Construct Cell Graphs"
@@ -69,4 +69,4 @@ navbar:
         href: articles/LMD_cross_comparison_demo.html
   right:
   - icon: fa-github
-    href: https://github.com/ruiqi0130/LocalizedMarkerDetector
+    href: https://github.com/KlugerLab/LocalizedMarkerDetector

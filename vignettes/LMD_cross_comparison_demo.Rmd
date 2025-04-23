@@ -18,7 +18,7 @@ knitr::opts_chunk$set(
 ```
 
 # Loading Data
-One of the downstream tasks for LMD is cross-sample comparison to identify sample-enriched or shared cell populations without the need for integration and differential abundance testing. Here we use a 10x mouse embryonic skin dataset. The processing step can be found [here](https://github.com/ruiqi0130/LocalizedMarkerDetector/blob/main/LMD-paper/analysis/mouse_smoM2_example_process_from_10x.R). The 10x data and processed Seurat data are available from the corresponding authors upon reasonable request.
+One of the downstream tasks for LMD is cross-sample comparison to identify sample-enriched or shared cell populations without the need for integration and differential abundance testing. Here we use a 10x mouse embryonic skin dataset. The processing step can be found [here](https://github.com/KlugerLab/LocalizedMarkerDetector/blob/main/LMD-paper/analysis/mouse_smoM2_example_process_from_10x.R). The 10x data and processed Seurat data are available from the corresponding authors upon reasonable request.
 
 ```{r, warning = FALSE, message=FALSE}
 ##### Load required R libraries
@@ -35,7 +35,7 @@ This dataset includes a SmoM2 mutant sample with a paired wildtype sample, both 
 dir.path0 = "~/" # Specify the directory path where the data is saved
 ```
 ```{r, warning = FALSE, message=FALSE, include = FALSE}
-source("../LMD-paper/paths.R")
+source("paths.R")
 ```
 ```{r load_data, fig.height=3, fig.width=6, warning = FALSE, message=FALSE}
 data_S_MUT <- readRDS(file.path(dir.path0,"smom2/process_data/data_S_smom2_dermal_E13.5_MUT.rds"))

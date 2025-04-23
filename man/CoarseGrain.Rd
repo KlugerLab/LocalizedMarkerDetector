@@ -2,7 +2,7 @@
 % Please edit documentation in R/calculate_lmds.R
 \name{CoarseGrain}
 \alias{CoarseGrain}
-\title{Coarse-Grain Cell Embedding}
+\title{Cell graph coarse graining}
 \usage{
 CoarseGrain(
   feature_space,

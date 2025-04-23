@@ -20,7 +20,7 @@ Authors@R:
 Description: Localized Marker Detector (LMD) is a computational framework designed for the identification of gene expression markers localized to specific cell populations within single-cell RNA sequencing data. 
 License: MIT + file LICENSE
 Encoding: UTF-8
-URL: https://ruiqi0130.github.io/LocalizedMarkerDetector/, https://github.com/ruiqi0130/LocalizedMarkerDetector
+URL: https://KlugerLab.github.io/LocalizedMarkerDetector/, https://github.com/KlugerLab/LocalizedMarkerDetector
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
