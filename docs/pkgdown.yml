@@ -4,7 +4,7 @@ pkgdown_sha: ~
 articles:
   LMD_cross_comparison_demo: LMD_cross_comparison_demo.html
   LMD_demo: LMD_demo.html
-last_built: 2025-04-23T01:01Z
+last_built: 2025-04-29T01:16Z
 urls:
   reference: https://github.com/KlugerLab/LocalizedMarkerDetector/reference
   article: https://github.com/KlugerLab/LocalizedMarkerDetector/articles
