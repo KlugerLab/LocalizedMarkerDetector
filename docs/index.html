@@ -109,9 +109,9 @@
 <h2 id="docker-installation">Docker Installation<a class="anchor" aria-label="anchor" href="#docker-installation"></a>
 </h2>
 <p>Alternatively, we provide a Docker environment with LMD and all its dependencies pre-installed. The pre-built Docker image can be downloaded using:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> pull ruiqi0130/lmd-rstudio:lastest</span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> pull ruiqi0130/lmd-rstudio:latest</span></code></pre></div>
 <p>and to run the docker container:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> run <span class="at">-it</span> <span class="at">--rm</span> <span class="at">--name</span> lmd <span class="at">-p</span> 8029:8787  <span class="at">-v</span> /data/:/data/   docker.io/ruiqi0130/lmd-rstudio:latest</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> run <span class="at">-it</span> <span class="at">--rm</span> <span class="at">--name</span> lmd <span class="at">-p</span> 8029:8787 <span class="at">-v</span> /data/:/data/ docker.io/ruiqi0130/lmd-rstudio:latest</span></code></pre></div>
 <p>Here, change <code>/data:/data</code> to <code>&lt;your_local_data_directory&gt;:/data</code>. A rstudio will be on port 8029.</p>
 </div>
 <div class="section level2">

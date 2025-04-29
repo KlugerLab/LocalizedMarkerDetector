@@ -38,13 +38,13 @@ dependencies pre-installed. The pre-built Docker image can be downloaded
 using:
 
 ``` bash
-docker pull ruiqi0130/lmd-rstudio:lastest
+docker pull ruiqi0130/lmd-rstudio:latest
 ```
 
 and to run the docker container:
 
 ``` bash
-docker run -it --rm --name lmd -p 8029:8787  -v /data/:/data/   docker.io/ruiqi0130/lmd-rstudio:latest
+docker run -it --rm --name lmd -p 8029:8787 -v /data/:/data/ docker.io/ruiqi0130/lmd-rstudio:latest
 ```
 
 Here, change `/data:/data` to `<your_local_data_directory>:/data`. A
