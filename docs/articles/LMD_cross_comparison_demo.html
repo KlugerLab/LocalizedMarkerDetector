@@ -95,9 +95,10 @@
 <p>One of the downstream tasks for LMD is cross-sample comparison to
 identify sample-enriched or shared cell populations without the need for
 integration and differential abundance testing. Here we use a 10x mouse
-embryonic skin dataset. The processing step can be found <a href="https://github.com/KlugerLab/LocalizedMarkerDetector/blob/main/LMD-paper/analysis/mouse_smoM2_example_process_from_10x.R">here</a>.
-The 10x data and processed Seurat data are available from the
-corresponding authors upon reasonable request.</p>
+embryonic skin dataset. The preprocessed Seurat object for this tutorial
+can be downloaded from <a href="https://figshare.com/ndownloader/files/55008218" class="external-link">figshare for
+Mutant</a> and <a href="https://figshare.com/ndownloader/files/55008224" class="external-link">figshare for
+Wildtype</a>.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">##### Load required R libraries</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st"><a href="https://KlugerLab.github.io/LocalizedMarkerDetector/" class="external-link">"LocalizedMarkerDetector"</a></span><span class="op">)</span></span>
@@ -110,10 +111,12 @@ sample, both collected at embryonic day 13.5. We can visualize these two
 samples using UMAP, with cells color-coded by cell types.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">##### Load Data</span></span>
-<span><span class="va">dir.path0</span> <span class="op">=</span> <span class="st">"~/"</span> <span class="co"># Specify the directory path where the data is saved</span></span></code></pre></div>
+<span><span class="va">dir.path0</span> <span class="op">=</span> <span class="st">"~/"</span> <span class="co"># Specify the directory path where the data is saved</span></span>
+<span><span class="va">file_name1</span> <span class="op">=</span> <span class="st">"data_S_smom2_dermal_E13.5_MUT.rds"</span> <span class="co"># Specify the file name for saving the mutant</span></span>
+<span><span class="va">file_name2</span> <span class="op">=</span> <span class="st">"data_S_smom2_dermal_E13.5_CTL.rds"</span> <span class="co"># Specify the file name for saving the wildtype</span></span></code></pre></div>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">data_S_MUT</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="st">"smom2/process_data/data_S_smom2_dermal_E13.5_MUT.rds"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">data_S_CTL</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="st">"smom2/process_data/data_S_smom2_dermal_E13.5_CTL.rds"</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">data_S_MUT</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="va">file_name1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">data_S_CTL</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir.path0</span>,<span class="va">file_name2</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">p1</span> <span class="op">=</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/DimPlot.html" class="external-link">DimPlot</a></span><span class="op">(</span><span class="va">data_S_MUT</span>, </span>
 <span>          group.by <span class="op">=</span> <span class="st">"celltype"</span>, shuffle <span class="op">=</span> <span class="cn">TRUE</span>, cols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"DC"</span><span class="op">=</span><span class="st">"#d1495b"</span>, <span class="st">"UD"</span> <span class="op">=</span> <span class="st">"#edae49"</span>, <span class="st">"LD"</span> <span class="op">=</span> <span class="st">"#d3d3d3"</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">ggtitle</a></span><span class="op">(</span><span class="st">"Mutant"</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://satijalab.org/seurat/reference/SeuratTheme.html" class="external-link">NoAxes</a></span><span class="op">(</span><span class="op">)</span></span>

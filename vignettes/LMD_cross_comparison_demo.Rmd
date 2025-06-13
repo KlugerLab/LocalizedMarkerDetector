@@ -18,7 +18,7 @@ knitr::opts_chunk$set(
 ```
 
 # Loading Data
-One of the downstream tasks for LMD is cross-sample comparison to identify sample-enriched or shared cell populations without the need for integration and differential abundance testing. Here we use a 10x mouse embryonic skin dataset. The processing step can be found [here](https://github.com/KlugerLab/LocalizedMarkerDetector/blob/main/LMD-paper/analysis/mouse_smoM2_example_process_from_10x.R). The 10x data and processed Seurat data are available from the corresponding authors upon reasonable request.
+One of the downstream tasks for LMD is cross-sample comparison to identify sample-enriched or shared cell populations without the need for integration and differential abundance testing. Here we use a 10x mouse embryonic skin dataset. The preprocessed Seurat object for this tutorial can be downloaded from [figshare for Mutant](https://figshare.com/ndownloader/files/55008218) and [figshare for Wildtype](https://figshare.com/ndownloader/files/55008224).
 
 ```{r, warning = FALSE, message=FALSE}
 ##### Load required R libraries
@@ -33,13 +33,16 @@ This dataset includes a SmoM2 mutant sample with a paired wildtype sample, both 
 ```{r, warning = FALSE, message=FALSE}
 ##### Load Data
 dir.path0 = "~/" # Specify the directory path where the data is saved
+file_name1 = "data_S_smom2_dermal_E13.5_MUT.rds" # Specify the file name for saving the mutant
+file_name2 = "data_S_smom2_dermal_E13.5_CTL.rds" # Specify the file name for saving the wildtype
 ```
 ```{r, warning = FALSE, message=FALSE, include = FALSE}
 source("paths.R")
+dir.path0 = file.path(dir.path0,"smom2/process_data")
 ```
 ```{r load_data, fig.height=3, fig.width=6, warning = FALSE, message=FALSE}
-data_S_MUT <- readRDS(file.path(dir.path0,"smom2/process_data/data_S_smom2_dermal_E13.5_MUT.rds"))
-data_S_CTL <- readRDS(file.path(dir.path0,"smom2/process_data/data_S_smom2_dermal_E13.5_CTL.rds"))
+data_S_MUT <- readRDS(file.path(dir.path0,file_name1))
+data_S_CTL <- readRDS(file.path(dir.path0,file_name2))
 
 p1 = DimPlot(data_S_MUT, 
           group.by = "celltype", shuffle = TRUE, cols = c("DC"="#d1495b", "UD" = "#edae49", "LD" = "#d3d3d3")) + ggtitle("Mutant") & NoAxes()
