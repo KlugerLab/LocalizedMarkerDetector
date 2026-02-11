@@ -3,6 +3,10 @@ template:
 
 url: https://github.com/KlugerLab/LocalizedMarkerDetector
 
+home:
+  sidebar:
+    structure: [links, license, authors, dev]
+
 reference:
   - title: "Construct Cell Graphs"
     # desc: >

@@ -62,5 +62,13 @@ Please check [LMD tutorial](https://KlugerLab.github.io/LocalizedMarkerDetector/
 ## References
 References of LMD functions can be found [here](https://KlugerLab.github.io/LocalizedMarkerDetector/reference/index.html).
 
+For additional information, please reference our paper:
+
+**Cluster-independent multiscale marker identification in single-cell RNA-seq data using localized marker detector (LMD)**
+Ruiqi Li, Rihao Qu, Fabio Parisi, Francesco Strino, Hainan Lam, Jay S Stanley III, Xiuyuan Cheng, Peggy Myung, Yuval Kluger
+*Communications Biology*. 2025 Jul 16;8(1):1058. doi: https://doi.org/10.1038/s42003-025-08485-y
+
+
+
 <!-- Data used in this tutorial can be downloaded from [Tabula Muris](https://figshare.com/ndownloader/files/13092380). -->
 
